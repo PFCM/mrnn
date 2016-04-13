@@ -5,6 +5,7 @@ from __future__ import print_function
 
 import cProfile
 import sys
+import os
 
 import numpy as np
 import tensorflow as tf
@@ -22,20 +23,25 @@ flags.DEFINE_integer('num_epochs', 100, 'how many times through the data')
 flags.DEFINE_integer('num_chars', 1000000, 'how much of the data to use')
 flags.DEFINE_boolean('profile', False, 'if true, runs the whole lot in a'
                                        'profiler')
-flags.DEFINE_float('learning_rate_decay', 0.995, 'rate of linear decay of the learning rate')
-flags.DEFINE_integer('start_decay', 10, 'how many epochs to do before decaying the lr')
+flags.DEFINE_float('learning_rate_decay', 0.995, 'rate of linear decay of the '
+                                                 'learning rate')
+flags.DEFINE_integer('start_decay', 10, 'how many epochs to do before '
+                                        'decaying the lr')
 flags.DEFINE_float('min_lr', 1e-5, 'minimum learning rate to decay to')
 flags.DEFINE_string('results_file', 'results.csv', 'where to put the results'
-                                                   ' (train/valid loss, test loss)')
+                                                   ' (train/valid loss)')
 flags.DEFINE_string('sample_folder', 'samples', 'where to write samples')
 flags.DEFINE_string('model_folder', 'models', 'where to store saved models')
-flags.DEFINE_string('model_prefix', 'lstm', 'something to prepend to the name of the saved models')
+flags.DEFINE_string('model_prefix', 'lstm', 'something to prepend to the name '
+                                            'of the saved models')
+flags.DEFINE_boolean('use_latest', False, 'whether to try load from file')
+flags.DEFINE_float('dropout', 0.5, 'input dropout')
 
 FLAGS = flags.FLAGS
 
 
 def inference(input_var, shape, vocab_size, num_steps,
-              batch_size, return_initial_state=False):
+              batch_size, return_initial_state=False, dropout=1.0):
     """Makes the model up to logits.
 
     Args:
@@ -43,8 +49,12 @@ def inference(input_var, shape, vocab_size, num_steps,
         shape: list of layer sizes.
         vocab_size: the number of symbols in and out.
         num_steps: the length of the sequences.
-        return_init_state: whether or not to return the initial state
+        return_initial_state: whether or not to return the initial state
             variable.
+        dropout: the probability of keeping the inputs. Can be a tensor,
+            in which case dropout wrappers will be added and it can be changed
+            on the fly. Otherwise it will be fixed, it it is 1.0 (default)
+            dropout wrappers will not be added.
 
     Returns:
         (outputs, state) where outputs is a big tensor of output logits,
@@ -58,12 +68,13 @@ def inference(input_var, shape, vocab_size, num_steps,
     last_size = shape[0]
     cells = []
     for layer in shape:
-        #cells.append(mrnn.MRNNCell(layer, last_size))
-        #cells.append(tf.nn.rnn_cell.BasicRNNCell(layer))
-        cells.append(tf.nn.rnn_cell.DropoutWrapper(
-            tf.nn.rnn_cell.LSTMCell(layer, last_size),
-            input_keep_prob=0.5 if num_steps != 1 else 1.0))
+        # cells.append(mrnn.MRNNCell(layer, last_size))
+        # cells.append(tf.nn.rnn_cell.BasicRNNCell(layer))
+        cells.append(tf.nn.rnn_cell.LSTMCell(layer, last_size))
         last_size = layer
+    if dropout != 1.0:  # != rather than < because could be tensor
+        cells = [tf.nn.rnn_cell.DropoutWrapper(cell, input_keep_prob=dropout)
+                 for cell in cells]
     cell = tf.nn.rnn_cell.MultiRNNCell(cells)
     # make sure the inputs are an approprite list
     inputs = [tf.squeeze(input_, [1])
@@ -124,7 +135,7 @@ def train(cost, learning_rate, max_grad_norm=10.0):
     tvars = tf.trainable_variables()
     grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars),
                                       max_grad_norm)
-    #opt = tf.train.GradientDescentOptimizer(learning_rate)
+    # opt = tf.train.GradientDescentOptimizer(learning_rate)
     opt = tf.train.AdamOptimizer(learning_rate, beta1=0.9,
                                  beta2=0.95, epsilon=1e-6)
     return opt.apply_gradients(zip(grads, tvars))
@@ -154,12 +165,14 @@ def run_epoch(sess, data_iter, initial_state, final_state, cost, train_op,
                                                      target_var))
         costs += batch_loss
         steps += 1
-        print('\r({:.3f}) -- xent: {:.4f}'.format(progress, costs/steps), end='')
+        print('\r({:.3f}) -- xent: {:.4f}'.format(progress, costs/steps),
+              end='')
     print()
     return costs / steps
 
 
-def gen_sample(vocab, probs, input_var, in_state_var, out_state_var, length=1000):
+def gen_sample(vocab, probs, input_var, in_state_var, out_state_var,
+               length=1000):
     """Gets a sample from the network. Uses the default session."""
     # get an initial state
     input_data = int(vocab['"'])  # first letter of the book
@@ -175,29 +188,32 @@ def gen_sample(vocab, probs, input_var, in_state_var, out_state_var, length=1000
         try:
             input_data = np.random.multinomial(1, current_probs.flatten())
         except:
-            #print('~~~~probs did not sum to one :(', file=sys.stderr)
+            # print('~~~~probs did not sum to one :(', file=sys.stderr)
             input_data = current_probs.flatten()
         input_data = np.argmax(input_data)
         sample.append(inverse_vocab[input_data])
-    return ''.join(sample)       
+    return ''.join(sample)
 
 
 def main(_):
     """do the stuff"""
     # first we have to get the model
-    print('...getting model...', end='')
+    print('\n~\n~~\n~~~\n...getting model...', end='')
     inputs = tf.placeholder(tf.int32,
                             [FLAGS.batch_size, FLAGS.num_steps])
     targets = tf.placeholder(tf.int32,
                              [FLAGS.batch_size, FLAGS.num_steps])
     inputs_1 = tf.placeholder(tf.int32, [1, 1])
-    
+
     vocab = data.get_vocab('char')
+
+    dropout = tf.get_variable('dropout', [], trainable=False)
 
     with tf.variable_scope('rnn_model') as scope:
         full_outputs, final_state = inference(
             inputs, [FLAGS.width] * FLAGS.num_layers,
-            len(vocab), FLAGS.num_steps, FLAGS.batch_size)
+            len(vocab), FLAGS.num_steps, FLAGS.batch_size,
+            dropout=dropout)
         av_cost = loss(full_outputs, targets, len(vocab),
                        FLAGS.batch_size, FLAGS.num_steps)
         lr_var = tf.get_variable('learning_rate', [])
@@ -212,12 +228,31 @@ def main(_):
     print('\r{:~^30}'.format('got model'))
     sess = tf.Session()
     lr = FLAGS.learning_rate  # base learning rate
+
+    # set up a saver to save the model
+    # TODO (pfcm): use a global step tensor and save it too
+    saver = tf.train.Saver(tf.trainable_variables(),
+                           max_to_keep=10)
+    model_name = os.path.join(FLAGS.model_folder,
+                              FLAGS.model_prefix)
+    model_name += '({})'.format(
+        '-'.join([str(FLAGS.width)] * FLAGS.num_layers))
     with sess.as_default():
-        print('...initialising...', end='')
+        print('...initialising...', end='', flush=True)
         sess.run(tf.initialize_all_variables())
-        print('\r{:~^30}'.format('initialised'))
+        if FLAGS.use_latest:
+            checkpoint = tf.train.latest_checkpoint(FLAGS.model_folder)
+            if checkpoint is None:
+                print('\rIssue: no checkpoint found, but you asked to load '
+                      'from one')
+            else:
+                saver.restore(sess, checkpoint)
+                print('\r{:~^30}'.format('loaded from file'))
+        else:
+            print('\r{:~^30}'.format('initialised'))
         print('\n\n{:~>30}'.format('training: '))
         tv_file = 'train_valid_' + FLAGS.results_file
+        test_file = 'test.csv'
         print('~~~~(saving losses in {})'.format(tv_file))
         print('~~~~(saving models in {})'.format(FLAGS.model_folder))
         for epoch in range(FLAGS.num_epochs):
@@ -228,34 +263,57 @@ def main(_):
                 lr = max(lr, FLAGS.min_lr)
                 print('~~(new lr: {}'.format(lr))
             lr_var.assign(lr).eval()
-            #data_iter = data.get_char_iter(FLAGS.num_steps+1,
-            #FLAGS.batch_size,
-            #report_progress=True,
-            #overlap=1,
-            #sequential=True)
+            # data_iter = data.get_char_iter(FLAGS.num_steps+1,
+            # FLAGS.batch_size,
+            # report_progress=True,
+            # overlap=1,
+            # sequential=True)
             train_iter, valid_iter, test_iter = data.get_split_iters(
                 FLAGS.num_steps+1,
                 FLAGS.batch_size,
                 report_progress=True)
-            tloss = run_epoch(sess, train_iter, None, final_state, av_cost, train_op,
-                              inputs, targets)
+            # make sure the dropout is set
+            sess.run(dropout.assign(FLAGS.dropout))
+            tloss = run_epoch(sess, train_iter, None, final_state, av_cost,
+                              train_op, inputs, targets)
             print('~~~~Training xent: {}'.format(tloss))
-            vloss = run_epoch(sess, valid_iter, None, final_state, av_cost, tf.no_op,
-                              inputs, targets)
+            # ditch the dropout for validation purposes
+            sess.run(dropout.assign(FLAGS.dropout))
+            vloss = run_epoch(sess, valid_iter, None, final_state, av_cost,
+                              tf.no_op(), inputs, targets)
             print('~~~~Validation xent: {}'.format(vloss))
-            print('BUT NOT ACTUALLY BECAUSE YOU LEFT THE DROPOUT ON DIDN\'T YOU')
             # write the results of this epoch
-            with open(FLAGS.results_file, 'a') as rf:
+            with open(tv_file, 'a') as rf:
                 rf.write('{},{},{}\n'.format(epoch, tloss, vloss))
-            if (epoch+1)%10 == 0:
-                samp = gen_sample(vocab, char_probs, inputs_1, init_state_1, state_1)
+            if (epoch+1) % 10 == 0:
+                saver.save(sess, model_name, global_step=epoch+1)
+                samp = gen_sample(vocab,
+                                  char_probs,
+                                  inputs_1,
+                                  init_state_1,
+                                  state_1)
                 for line in samp.splitlines():
                     print('~~~~{}'.format(line))
-                sample_path = os.path.join(FLAGS.sample_folder, '{}.txt'.format(epoch+1))
+                sample_path = os.path.join(
+                    FLAGS.sample_folder, '{}.txt'.format(epoch+1))
                 with open(sample_path, 'w') as f:
                     f.write(samp)
-                print('SHOULD SAVE MODEL HERE')
-        print('AND THIS IS WHERE YOU SHOULD RUN IT ON THE TEST DATA')
+        # dropout is still 0 so let's go
+        test_loss = run_epoch(
+            sess,
+            test_iter,
+            None,
+            final_state,
+            av_cost,
+            tf.no_op(),
+            inputs,
+            targets)
+        print('~'*30)
+        print('{:~^30}'.format('Test loss: '))
+        print('{:~^30}'.format(test_loss))
+        print('~'*30)
+        with open(test_file, 'w') as f:
+            f.write('{}'.format(test_loss))
 
 if __name__ == '__main__':
     if FLAGS.profile:
