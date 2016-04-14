@@ -68,9 +68,9 @@ def inference(input_var, shape, vocab_size, num_steps,
     last_size = shape[0]
     cells = []
     for layer in shape:
-        # cells.append(mrnn.MRNNCell(layer, last_size))
+        cells.append(mrnn.MRNNCell(layer, last_size))
         # cells.append(tf.nn.rnn_cell.BasicRNNCell(layer))
-        cells.append(tf.nn.rnn_cell.LSTMCell(layer, last_size))
+        # cells.append(tf.nn.rnn_cell.LSTMCell(layer, last_size))
         last_size = layer
     if dropout != 1.0:  # != rather than < because could be tensor
         cells = [tf.nn.rnn_cell.DropoutWrapper(cell, input_keep_prob=dropout)
@@ -179,7 +179,7 @@ def gen_sample(vocab, probs, input_var, in_state_var, out_state_var,
     inverse_vocab = {b: a for a, b in vocab.items()}
     sess = tf.get_default_session()
     sample = ['"']
-    state = tf.zeros_like(in_state_var).eval()
+    state = tf.ones_like(in_state_var).eval()
     for _ in range(length):
         current_probs, state = sess.run(
             [probs, out_state_var],
