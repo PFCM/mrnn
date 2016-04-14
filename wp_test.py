@@ -62,13 +62,14 @@ def inference(input_var, shape, vocab_size, num_steps,
             and state is the final state of the rnn.
     """
     # first thing we need is some kind of embedding
-    embedding = tf.get_variable('embedding', [vocab_size, shape[0]])
-    inputs = tf.nn.embedding_lookup(embedding, input_var)
+    with tf.device('/cpu:0'):
+        embedding = tf.get_variable('embedding', [vocab_size, shape[0]])
+        inputs = tf.nn.embedding_lookup(embedding, input_var)
     # set up the cells
     last_size = shape[0]
     cells = []
     for layer in shape:
-        cells.append(mrnn.MRNNCell(layer, last_size))
+        cells.append(mrnn.IRNNCell(layer, last_size, tf.nn.elu))
         # cells.append(tf.nn.rnn_cell.BasicRNNCell(layer))
         # cells.append(tf.nn.rnn_cell.LSTMCell(layer, last_size))
         last_size = layer
@@ -135,10 +136,13 @@ def train(cost, learning_rate, max_grad_norm=10.0):
     tvars = tf.trainable_variables()
     grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars),
                                       max_grad_norm)
+    opt = tf.train.AdadeltaOptimizer(learning_rate)
     # opt = tf.train.GradientDescentOptimizer(learning_rate)
-    opt = tf.train.AdamOptimizer(learning_rate, beta1=0.9,
-                                 beta2=0.95, epsilon=1e-6)
+    # opt = tf.train.AdamOptimizer(learning_rate, beta1=0.9,
+    # beta2=0.95, epsilon=1e-6)
+    # opt = tf.train.RMSPropOptimizer(learning_rate, momentum=0.9)
     return opt.apply_gradients(zip(grads, tvars))
+    # return opt.minimize(cost)
 
 
 def fill_feed(batch, input_var, target_var):
@@ -216,7 +220,7 @@ def main(_):
             dropout=dropout)
         av_cost = loss(full_outputs, targets, len(vocab),
                        FLAGS.batch_size, FLAGS.num_steps)
-        lr_var = tf.get_variable('learning_rate', [])
+        lr_var = tf.get_variable('learning_rate', [], trainable=False)
         train_op = train(av_cost, lr_var)
         # get a one-step model for sampling
         scope.reuse_variables()
