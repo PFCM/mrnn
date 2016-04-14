@@ -58,5 +58,7 @@ class MRNNCell(tf.nn.rnn_cell.RNNCell):
                 [self.input_size, self.state_size])
             a = tf.matmul(state, hidden_weights)
             b = tf.matmul(inputs, input_weights)
-            output = tf.nn.relu(a * b)
+            bias = tf.get_variable('b', [self.state_size],
+                                   initializer=tf.constant_initializer(0.0))
+            output = tf.nn.relu(a * b + bias)
         return output, output
