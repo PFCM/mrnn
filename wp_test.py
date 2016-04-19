@@ -69,9 +69,10 @@ def inference(input_var, shape, vocab_size, num_steps,
     last_size = shape[0]
     cells = []
     for layer in shape:
-        cells.append(mrnn.IRNNCell(layer, last_size, tf.nn.elu))
+        # cells.append(mrnn.IRNNCell(layer, last_size, tf.identity))
         # cells.append(tf.nn.rnn_cell.BasicRNNCell(layer))
-        # cells.append(tf.nn.rnn_cell.LSTMCell(layer, last_size))
+        #cells.append(tf.nn.rnn_cell.LSTMCell(layer, last_size))
+        cells.append(mrnn.SimpleRandomSparseCell(layer, last_size, .1))
         last_size = layer
     if dropout != 1.0:  # != rather than < because could be tensor
         cells = [tf.nn.rnn_cell.DropoutWrapper(cell, input_keep_prob=dropout)
