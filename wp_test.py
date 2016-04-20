@@ -14,20 +14,26 @@ import rnndatasets.warandpeace as data
 import mrnn
 
 flags = tf.flags
-flags.DEFINE_float('learning_rate', 0.005, 'the learning rate')
+flags.DEFINE_integer('sample', 0, 'If > 0, then just generate a sample'
+                                  'of that length, print it to stderr and'
+                                  'exit')
+flags.DEFINE_string('sample_strategy', 'random', 'how to generate samples'
+                                                 'one of `random`, `ml` or'
+                                                 '`beam`. Beam search is not implemented.')
+flags.DEFINE_float('learning_rate', 0.001, 'the learning rate')
 flags.DEFINE_integer('num_steps', 100, 'how far to back propagate in time')
 flags.DEFINE_integer('batch_size', 100, 'how many batches')
-flags.DEFINE_integer('width', 100, 'how many units per layer')
-flags.DEFINE_integer('num_layers', 1, 'how many layers')
-flags.DEFINE_integer('num_epochs', 100, 'how many times through the data')
+flags.DEFINE_integer('width', 256, 'how many units per layer')
+flags.DEFINE_integer('num_layers', 3, 'how many layers')
+flags.DEFINE_integer('num_epochs', 500, 'how many times through the data')
 flags.DEFINE_integer('num_chars', 1000000, 'how much of the data to use')
 flags.DEFINE_boolean('profile', False, 'if true, runs the whole lot in a'
                                        'profiler')
 flags.DEFINE_float('learning_rate_decay', 0.995, 'rate of linear decay of the '
                                                  'learning rate')
-flags.DEFINE_integer('start_decay', 10, 'how many epochs to do before '
+flags.DEFINE_integer('start_decay', 25, 'how many epochs to do before '
                                         'decaying the lr')
-flags.DEFINE_float('min_lr', 1e-5, 'minimum learning rate to decay to')
+flags.DEFINE_float('min_lr', 1e-8, 'minimum learning rate to decay to')
 flags.DEFINE_string('results_file', 'results.csv', 'where to put the results'
                                                    ' (train/valid loss)')
 flags.DEFINE_string('sample_folder', 'samples', 'where to write samples')
@@ -70,8 +76,8 @@ def inference(input_var, shape, vocab_size, num_steps,
     cells = []
     for layer in shape:
         #cells.append(mrnn.IRNNCell(layer, last_size, tf.nn.elu))
-        cells.append(tf.nn.rnn_cell.BasicRNNCell(layer, last_size))
-        # cells.append(tf.nn.rnn_cell.LSTMCell(layer, last_size))
+        # cells.append(tf.nn.rnn_cell.BasicRNNCell(layer, last_size))
+        cells.append(tf.nn.rnn_cell.LSTMCell(layer, last_size))
         #cells.append(mrnn.SimpleRandomSparseCell(layer, last_size, .2))
         last_size = layer
     if dropout != 1.0:  # != rather than < because could be tensor
@@ -137,10 +143,11 @@ def train(cost, learning_rate, max_grad_norm=10.0):
     tvars = tf.trainable_variables()
     grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars),
                                       max_grad_norm)
-    opt = tf.train.AdadeltaOptimizer(learning_rate)
+    # opt = tf.train.AdadeltaOptimizer(learning_rate)
     # opt = tf.train.GradientDescentOptimizer(learning_rate)
-    # opt = tf.train.AdamOptimizer(learning_rate, beta1=0.9,
-    # beta2=0.95, epsilon=1e-6)
+    opt = tf.train.MomentumOptimizer(learning_rate, 0.99)
+    #opt = tf.train.AdamOptimizer(learning_rate, beta1=0.9,
+    #    beta2=0.95, epsilon=1e-6)
     # opt = tf.train.RMSPropOptimizer(learning_rate, momentum=0.9)
     return opt.apply_gradients(zip(grads, tvars))
     # return opt.minimize(cost)
@@ -191,11 +198,14 @@ def gen_sample(vocab, probs, input_var, in_state_var, out_state_var,
             [probs, out_state_var],
             {input_var: np.array(input_data).reshape((1, 1)),
              in_state_var: state})
-        try:
-            input_data = np.random.multinomial(1, current_probs.flatten())
-        except:
-            # print('~~~~probs did not sum to one :(', file=sys.stderr)
-            input_data = current_probs.flatten()
+        if FLAGS.sample_strategy == 'random':
+            try:
+                input_data = np.random.multinomial(1, current_probs.flatten())
+            except:
+                # print('~~~~probs did not sum to one :(', file=sys.stderr)
+                input_data = current_probs.flatten()
+        else:
+            input_data = current_probs.flatten()    
         input_data = np.argmax(input_data)
         sample.append(inverse_vocab[input_data])
     return ''.join(sample)
@@ -256,6 +266,15 @@ def main(_):
                 print('\r{:~^30}'.format('loaded from file'))
         else:
             print('\r{:~^30}'.format('initialised'))
+        if FLAGS.sample > 0:
+            print(gen_sample(vocab,
+                             char_probs,
+                             inputs_1,
+                             init_state_1,
+                             state_1,
+                             length=FLAGS.sample),
+                  file=sys.stderr)
+            return
         print('\n\n{:~>30}'.format('training: '))
         tv_file = 'train_valid_' + FLAGS.results_file
         test_file = 'test.csv'
