@@ -69,10 +69,10 @@ def inference(input_var, shape, vocab_size, num_steps,
     last_size = shape[0]
     cells = []
     for layer in shape:
-        # cells.append(mrnn.IRNNCell(layer, last_size, tf.identity))
-        # cells.append(tf.nn.rnn_cell.BasicRNNCell(layer))
-        #cells.append(tf.nn.rnn_cell.LSTMCell(layer, last_size))
-        cells.append(mrnn.SimpleRandomSparseCell(layer, last_size, .1))
+        #cells.append(mrnn.IRNNCell(layer, last_size, tf.nn.elu))
+        cells.append(tf.nn.rnn_cell.BasicRNNCell(layer, last_size))
+        # cells.append(tf.nn.rnn_cell.LSTMCell(layer, last_size))
+        #cells.append(mrnn.SimpleRandomSparseCell(layer, last_size, .2))
         last_size = layer
     if dropout != 1.0:  # != rather than < because could be tensor
         cells = [tf.nn.rnn_cell.DropoutWrapper(cell, input_keep_prob=dropout)
@@ -150,9 +150,10 @@ def fill_feed(batch, input_var, target_var):
     """Fills the feed dict with a batch (including setting up targets)"""
     inputs = batch[:-1]
     targets = batch[1:]
+    # this is dumb, should just fix up the datasets
     return {
-        input_var: inputs,
-        target_var: targets
+        input_var: np.array(inputs).T,
+        target_var: np.array(targets).T
     }
 
 
@@ -283,7 +284,7 @@ def main(_):
                               train_op, inputs, targets)
             print('~~~~Training xent: {}'.format(tloss))
             # ditch the dropout for validation purposes
-            sess.run(dropout.assign(FLAGS.dropout))
+            sess.run(dropout.assign(1))
             vloss = run_epoch(sess, valid_iter, None, final_state, av_cost,
                               tf.no_op(), inputs, targets)
             print('~~~~Validation xent: {}'.format(vloss))

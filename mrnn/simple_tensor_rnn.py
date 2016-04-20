@@ -56,6 +56,8 @@ class SimpleRandomSparseCell(tf.nn.rnn_cell.RNNCell):
                 big_tensor, state, adjoint_b=True)
             # reshape to (num_units x num_inputs x batch_size) and then
             # multiply each mode 1 slice with the inputs
+
+            # this is a problem
             input_shape = [shape.value for shape in inputs.get_shape()]
             step_a = tf.reshape(step_a, [self._num_units, self._num_inputs, input_shape[0]])
             step_b = tf.batch_matmul(
