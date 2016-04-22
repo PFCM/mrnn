@@ -14,6 +14,7 @@ import rnndatasets.warandpeace as data
 import mrnn
 
 flags = tf.flags
+flags.DEFINE_integer('seed', 0xface, 'graph level random seed, for repeatability')
 flags.DEFINE_integer('sample', 0, 'If > 0, then just generate a sample'
                                   'of that length, print it to stderr and'
                                   'exit')
@@ -34,7 +35,7 @@ flags.DEFINE_float('learning_rate_decay', 0.995, 'rate of linear decay of the '
 flags.DEFINE_integer('start_decay', 25, 'how many epochs to do before '
                                         'decaying the lr')
 flags.DEFINE_float('min_lr', 1e-8, 'minimum learning rate to decay to')
-flags.DEFINE_string('results_file', 'results.csv', 'where to put the results'
+flags.DEFINE_string('results_folder', '.', 'where to put the results'
                                                    ' (train/valid loss)')
 flags.DEFINE_string('sample_folder', 'samples', 'where to write samples')
 flags.DEFINE_string('model_folder', 'models', 'where to store saved models')
@@ -42,6 +43,10 @@ flags.DEFINE_string('model_prefix', 'lstm', 'something to prepend to the name '
                                             'of the saved models')
 flags.DEFINE_boolean('use_latest', False, 'whether to try load from file')
 flags.DEFINE_float('dropout', 0.5, 'input dropout')
+flags.DEFINE_string('weightnorm', 'none', 'how to normalise weights')
+flags.DEFINE_string('nonlinearity', 'tanh', 'nonlinearity to use. should be '
+                                            '"tanh" or "relu"')
+flags.DEFINE_float('momentum', 0.99, 'momentum for the sgd')
 
 FLAGS = flags.FLAGS
 
@@ -77,8 +82,10 @@ def inference(input_var, shape, vocab_size, num_steps,
     for layer in shape:
         #cells.append(mrnn.IRNNCell(layer, last_size, tf.nn.elu))
         # cells.append(tf.nn.rnn_cell.BasicRNNCell(layer, last_size))
-        cells.append(tf.nn.rnn_cell.LSTMCell(layer, last_size))
-        #cells.append(mrnn.SimpleRandomSparseCell(layer, last_size, .2))
+        #cells.append(tf.nn.rnn_cell.LSTMCell(layer, last_size))
+        #cells.append(mrnn.SimpleRandomSparseCell(layer, last_size, .1, nonlinearity=tf.nn.tanh))
+        cells.append(mrnn.VRNNCell(layer, last_size, weightnorm=FLAGS.weightnorm,
+                                   nonlinearity=tf.nn.tanh if FLAGS.nonlinearity == 'tanh' else tf.nn.relu))
         last_size = layer
     if dropout != 1.0:  # != rather than < because could be tensor
         cells = [tf.nn.rnn_cell.DropoutWrapper(cell, input_keep_prob=dropout)
@@ -138,14 +145,14 @@ def output_probs(logits):
     return tf.nn.softmax(logits)
 
 
-def train(cost, learning_rate, max_grad_norm=10.0):
+def train(cost, learning_rate, max_grad_norm=1000000.0):
     """Gets the training op"""
     tvars = tf.trainable_variables()
     grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars),
                                       max_grad_norm)
     # opt = tf.train.AdadeltaOptimizer(learning_rate)
     # opt = tf.train.GradientDescentOptimizer(learning_rate)
-    opt = tf.train.MomentumOptimizer(learning_rate, 0.99)
+    opt = tf.train.MomentumOptimizer(learning_rate, FLAGS.momentum)
     #opt = tf.train.AdamOptimizer(learning_rate, beta1=0.9,
     #    beta2=0.95, epsilon=1e-6)
     # opt = tf.train.RMSPropOptimizer(learning_rate, momentum=0.9)
@@ -214,6 +221,7 @@ def gen_sample(vocab, probs, input_var, in_state_var, out_state_var,
 def main(_):
     """do the stuff"""
     # first we have to get the model
+    tf.set_random_seed(FLAGS.seed)
     print('\n~\n~~\n~~~\n...getting model...', end='')
     inputs = tf.placeholder(tf.int32,
                             [FLAGS.batch_size, FLAGS.num_steps])
@@ -248,7 +256,7 @@ def main(_):
     # set up a saver to save the model
     # TODO (pfcm): use a global step tensor and save it too
     saver = tf.train.Saver(tf.trainable_variables(),
-                           max_to_keep=10)
+                           max_to_keep=3)
     model_name = os.path.join(FLAGS.model_folder,
                               FLAGS.model_prefix)
     model_name += '({})'.format(
@@ -276,7 +284,7 @@ def main(_):
                   file=sys.stderr)
             return
         print('\n\n{:~>30}'.format('training: '))
-        tv_file = 'train_valid_' + FLAGS.results_file
+        tv_file = FLAGS.results_folder + '/train_valid_loss.csv'
         test_file = 'test.csv'
         print('~~~~(saving losses in {})'.format(tv_file))
         print('~~~~(saving models in {})'.format(FLAGS.model_folder))
