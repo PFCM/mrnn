@@ -8,45 +8,7 @@ import logging
 import numpy as np
 import tensorflow as tf
 
-
-def flat_3tensor_product(t_a, m_b, output_shape,
-                             name='flat_tensor_product',
-                             sparse_tensor=True):
-    """Computes the product of a flattened three-way tensor and
-    a matrix, reshaping the output appropriately to the final matrix.
-
-    Args:
-        t_a: the (optionally sparse) flattened 3-tensor. The
-            way in which it is matricised determines wihch of its
-            indices gets squashed (ie. a mode-3 matricisation would
-            result in this being the mode-3 product).
-        m_b: the the dense matrix/vector we are getting a result with.
-        output_shape: the resulting size to reshape the output to.
-        name: a name for any added ops.
-        sparse_tensor: if `tensor` is an instance of tf.SparseTensor
-            then we can (and very much want to) use more efficient 
-            matmul.
-
-    Returns:
-        dense matrix with shape `output_shape`
-
-    Raises:
-        probably a lot, does no checking to make sure it has sane
-        inputs.
-    """
-    with tf.name_scope(name):
-        if sparse_tensor:
-            # see
-            # https://www.tensorflow.org/versions/r0.8/api_docs/python/sparse_ops.html#sparse_tensor_dense_matmul
-            # and make sure the t_a is appropriately sorted and the
-            # right way around so the multiply works out
-            result = tf.sparse_tensor_dense_matmul(t_a, m_b)
-        else:
-            # standard matmul, same caveats apply re the shape
-            result = tf.matmul(t_a, m_b)
-        return tf.reshape(result, output_shape)
-
-
+# old, probably not useful
 def random_sparse_tensor(shape, sparsity, stddev=0.01, name='random-sparse'):
     """Returns a sparse tensor with a set sparsity but
     with random indices and values.
@@ -85,4 +47,46 @@ def random_sparse_tensor(shape, sparsity, stddev=0.01, name='random-sparse'):
                            [num_elements],
                            initializer=tf.random_normal_initializer(
                                stddev=stddev))
-    return tf.SparseTensor(idces, vals, shape)
+    return tf.sparse_reorder(tf.SparseTensor(idces, vals, shape))
+
+
+def get_weightnormed_matrix(shape, axis=1, name='weightnorm',
+                            V_init=tf.random_normal_initializer(stddev=0.015),
+                            train_gains=True, dtype=tf.float32):
+    """Returns a matrix weightnormed across a given index.
+
+    Adds 2 trainable variables:
+      - V, a matrix, initialised with the default init
+      - g, a vector, initialised to 1s
+
+    returns g * V / elementwise l2 norm of V.
+
+    Args:
+        shape: sequence of 2 ints. We are only dealing with matrices
+            here.
+        axis: how to do the normalising, defaults to 1, which is likely
+            to be what you want if your data is `[batch_size x d]`.
+        name: name for the scope, defaults to weightnorm
+        V_init: initialiser for the unnormalised part of the matrix.
+        train_gains: if false, gains will be always one.
+        dtype: type for the created variables.
+
+    Returns:
+        Tensor: the matrix whose rows or columns will never exceed the learned norm.
+    """
+    if len(shape) != 2:
+        raise ValueError('Expected two dimensional shape, but it is {}'.format(shape))
+    with tf.name_scope(name):
+        unnormed_w = tf.get_variable(name+'_V', shape, trainable=True,
+                                     initializer=V_init,
+                                     dtype=dtype)
+        gains = tf.get_variable(name+'_g', shape[0], trainable=train_gains,
+                                initializer=tf.constant_initializer(1.0),
+                                dtype=dtype)
+        inv_norms = tf.rsqrt(
+            tf.reduce_sum(
+                tf.square(unnormed_w),
+                reduction_indices=1))
+        return gains * unnormed_w * inv_norms
+        
+        

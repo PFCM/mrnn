@@ -58,6 +58,8 @@ class SimpleRandomSparseCell(tf.nn.rnn_cell.RNNCell):
             outer_prod = tf.reshape(
                 outer_prod,
                 [-1, self._num_units * self._num_inputs])
+            # I think this is right
+            # we have a row for each W_k
             tensor_prod = tf.sparse_tensor_dense_matmul(
                 big_tensor, outer_prod, adjoint_b=True)
             tensor_prod = tf.transpose(tensor_prod)
