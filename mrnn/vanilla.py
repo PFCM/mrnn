@@ -158,6 +158,6 @@ def IRNNCell(num_units, input_size=None, nonlinearity=tf.nn.relu,
     return VRNNCell(num_units, input_size,
                     nonlinearity=nonlinearity,
                     hh_init=init.identity_initializer(),
-                    xh_init=init.identity_initializer(),
+                    # xh_init=init.identity_initializer(),
                     b_init=tf.constant_initializer(0., dtype=tf.float32),
                     weightnorm=weightnorm)
