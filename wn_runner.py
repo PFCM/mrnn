@@ -7,11 +7,11 @@ import subprocess
 
 data_dir = 'weightnorm_tests'
 
-weightnorm_values = ['full', 'input', 'recurrent', 'none', 'flat-none',
+weightnorm_values = ['full', 'input', 'recurrent', 'none',
                      'flat-norm']
 nonlinearity_values = ['tanh', 'relu']
 inits = ['normal', 'identity']
-lr_vals = ['0.05', '0.01', '0.1', '0.001']
+lr_vals = ['0.01', '0.1']
 
 program_args = [
     'python',
@@ -22,17 +22,19 @@ program_args = [
     '--learning_rate_decay=0.95',
     '--start_decay=10',
     '--momentum=0.95',
-    '--num_epochs=100',
+    '--num_epochs=1',
     '--dropout=1.0',
     '--model_prefix=rnn'  # they all get separate folders so it doesn't matter
 ]
 
-grid_iter = itertools.product(lr_vals, nonlinearity_values,
+grid_iter = itertools.product(weightnorm_values, nonlinearity_values,
                               inits, lr_vals)
 
 for wn, nonlin, init, lr in grid_iter:
     run_dir = os.path.join(
         data_dir, '{}-{}'.format(wn, nonlin))
+    run_dir = os.path.join(
+        run_dir, init, lr.split('.')[1])
     model_dir = os.path.join(run_dir, 'models')
     sample_dir = os.path.join(run_dir, 'samples')
     # make directories if necessary

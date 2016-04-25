@@ -65,7 +65,7 @@ class FlatRNNCell(tf.nn.rnn_cell.RNNCell):
                                           initializer=self._W_init)
             bias = tf.get_variable('b', [self.state_size])
             args = tf.concat(1, [inputs, state])
-            output = self._nonlin(tf.matmul(args, weights) + b)
+            output = self._nonlin(tf.matmul(args, weights) + bias)
         return output, output
 
 
