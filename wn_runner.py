@@ -7,25 +7,30 @@ import subprocess
 
 data_dir = 'weightnorm_tests'
 
-weightnorm_values = ['full', 'input', 'recurrent', 'none', 'flat-none', 'flat-norm']
-nonlinearity_values = ['tanh', 'relu', 'elu']
+weightnorm_values = ['full', 'input', 'recurrent', 'none', 'flat-none',
+                     'flat-norm']
+nonlinearity_values = ['tanh', 'relu']
+inits = ['normal', 'identity']
+lr_vals = ['0.05', '0.01', '0.1', '0.001']
 
 program_args = [
     'python',
     'wp_test.py',
-    '--width=256',
-    '--num_layers=3',
+    '--width=128',
+    '--num_layers=2',
     '--batch_size=64',
-    '--learning_rate=0.05',
-    '--learning_rate_decay=0.99',
+    '--learning_rate_decay=0.95',
     '--start_decay=10',
     '--momentum=0.95',
-    '--num_epochs=200',
+    '--num_epochs=100',
     '--dropout=1.0',
     '--model_prefix=rnn'  # they all get separate folders so it doesn't matter
 ]
 
-for wn, nonlin in itertools.product(weightnorm_values, nonlinearity_values):
+grid_iter = itertools.product(lr_vals, nonlinearity_values,
+                              inits, lr_vals)
+
+for wn, nonlin, init, lr in grid_iter:
     run_dir = os.path.join(
         data_dir, '{}-{}'.format(wn, nonlin))
     model_dir = os.path.join(run_dir, 'models')
@@ -39,7 +44,9 @@ for wn, nonlin in itertools.product(weightnorm_values, nonlinearity_values):
         '--model_folder=' + model_dir,
         '--sample_folder=' + sample_dir,
         '--nonlinearity=' + nonlin,
-        '--weightnorm=' + wn
+        '--weightnorm=' + wn,
+        '--learning_rate=' + lr,
+        '--rec_init=' + init
     ]
     args = program_args + unique_args
     # print something flashy
@@ -47,7 +54,8 @@ for wn, nonlin in itertools.product(weightnorm_values, nonlinearity_values):
     print('/' * twidth)
     print('\\' * twidth)
     print('{:/^{}}'.format('STARTING NEW RUN', twidth))
-    print('{:\\^{}}'.format('({}, {})'.format(wn, nonlin), twidth))
+    print('{:\\^{}}'.format('({}, {}, {}, {})'.format(
+        wn, nonlin, lr, init), twidth))
     print('{:/^{}}'.format(run_dir, twidth))
     print('/' * twidth)
     print('\\' * twidth)
@@ -62,4 +70,3 @@ for wn, nonlin in itertools.product(weightnorm_values, nonlinearity_values):
     print('{:\\^{}}'.format('({}s)'.format(end-start), twidth))
     print('/' * twidth)
     print('\\' * twidth)
-    
