@@ -14,13 +14,15 @@ import rnndatasets.warandpeace as data
 import mrnn
 
 flags = tf.flags
-flags.DEFINE_integer('seed', 0xface, 'graph level random seed, for repeatability')
+flags.DEFINE_integer('seed', 0xface, 'graph level random seed, for'
+                                     'repeatability')
 flags.DEFINE_integer('sample', 0, 'If > 0, then just generate a sample'
                                   'of that length, print it to stderr and'
                                   'exit')
 flags.DEFINE_string('sample_strategy', 'random', 'how to generate samples'
                                                  'one of `random`, `ml` or'
-                                                 '`beam`. Beam search is not implemented.')
+                                                 '`beam`. Beam search is not '
+                                                 'implemented.')
 flags.DEFINE_float('learning_rate', 0.001, 'the learning rate')
 flags.DEFINE_integer('num_steps', 100, 'how far to back propagate in time')
 flags.DEFINE_integer('batch_size', 100, 'how many batches')
@@ -36,7 +38,7 @@ flags.DEFINE_integer('start_decay', 25, 'how many epochs to do before '
                                         'decaying the lr')
 flags.DEFINE_float('min_lr', 1e-8, 'minimum learning rate to decay to')
 flags.DEFINE_string('results_folder', '.', 'where to put the results'
-                                                   ' (train/valid loss)')
+                                           ' (train/valid loss)')
 flags.DEFINE_string('sample_folder', 'samples', 'where to write samples')
 flags.DEFINE_string('model_folder', 'models', 'where to store saved models')
 flags.DEFINE_string('model_prefix', 'lstm', 'something to prepend to the name '
@@ -79,13 +81,14 @@ def inference(input_var, shape, vocab_size, num_steps,
     # set up the cells
     last_size = shape[0]
     cells = []
-    #print('  weightnorm: {}'.format(FLAGS.weightnorm))
-    #print('      nonlin: {}'.format(FLAGS.nonlinearity))
+    # print('  weightnorm: {}'.format(FLAGS.weightnorm))
+    # print('      nonlin: {}'.format(FLAGS.nonlinearity))
     for layer in shape:
-        #cells.append(mrnn.IRNNCell(layer, last_size, tf.nn.elu))
+        # cells.append(mrnn.IRNNCell(layer, last_size, tf.nn.elu))
         # cells.append(tf.nn.rnn_cell.BasicRNNCell(layer, last_size))
-        #cells.append(tf.nn.rnn_cell.LSTMCell(layer, last_size))
-        #cells.append(mrnn.SimpleRandomSparseCell(layer, last_size, .1, nonlinearity=tf.nn.tanh))
+        # cells.append(tf.nn.rnn_cell.LSTMCell(layer, last_size))
+        # cells.append(mrnn.SimpleRandomSparseCell(layer, last_size, .1,
+        #              nonlinearity=tf.nn.tanh))
         if FLAGS.nonlinearity == 'tanh':
             nonlin = tf.nn.tanh
         elif FLAGS.nonlinearity == 'relu':
@@ -95,14 +98,16 @@ def inference(input_var, shape, vocab_size, num_steps,
         else:
             raise ValueError('unknown nonlin: {}'.format(FLAGS.nonlinearity))
         if FLAGS.weightnorm == 'flat-norm':
-            # then we shuold be trying a normalised version of the whole concatted matrix
+            # then we should be trying a normalised version of the whole
+            # concatted matrix
             cells.append(mrnn.FlatRNNCell(layer, last_size, weightnorm=True,
                                           nonlinearity=nonlin))
         elif FLAGS.weightnorm == 'flat-none':
             cells.append(mrnn.FlatRNNCell(layer, last_size, weightnorm=False,
                                           nonlinearity=nonlin))
         else:
-            cells.append(mrnn.VRNNCell(layer, last_size, weightnorm=FLAGS.weightnorm,
+            cells.append(mrnn.VRNNCell(layer, last_size,
+                                       weightnorm=FLAGS.weightnorm,
                                        nonlinearity=nonlin))
         last_size = layer
     if dropout != 1.0:  # != rather than < because could be tensor
@@ -230,7 +235,7 @@ def gen_sample(vocab, probs, input_var, in_state_var, out_state_var,
                 # print('~~~~probs did not sum to one :(', file=sys.stderr)
                 input_data = current_probs.flatten()
         else:
-            input_data = current_probs.flatten()    
+            input_data = current_probs.flatten()
         input_data = np.argmax(input_data)
         sample.append(inverse_vocab[input_data])
     return ''.join(sample)

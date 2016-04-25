@@ -26,8 +26,8 @@ class FlatRNNCell(tf.nn.rnn_cell.RNNCell):
         Args:
           num_units (int): how many cells/outputs.
           input_size (int): how many inputs.
-          W_init (tensorflow initializer): initialiser for the big weight matrix,
-            default is random normal with mean 0 and stddev 0.15.
+          W_init (tensorflow initializer): initialiser for the big weight
+            matrix, default is random normal with mean 0 and stddev 0.15.
           weightnorm: whether to weight normalise the rows of the resulting
             matrix.
         """
@@ -131,7 +131,7 @@ class VRNNCell(tf.nn.rnn_cell.RNNCell):
                     'V',
                     [self.input_size, self.state_size],
                     initializer=self._xh_init)
-            if self._weightnorm =='full' or self._weightnorm == 'recurrent':
+            if self._weightnorm == 'full' or self._weightnorm == 'recurrent':
                 hidden_weights = hops.get_weightnormed_matrix(
                     [self.state_size, self.state_size],
                     name='W', V_init=self._hh_init)
@@ -141,7 +141,8 @@ class VRNNCell(tf.nn.rnn_cell.RNNCell):
                     'W',
                     [self.state_size, self.state_size],
                     initializer=self._hh_init)
-            bias = tf.get_variable('b', [self.state_size], initializer=self._b_init)
+            bias = tf.get_variable('b', [self.state_size],
+                                   initializer=self._b_init)
 
             a = tf.matmul(state, hidden_weights)
             b = tf.matmul(inputs, input_weights)
@@ -149,7 +150,8 @@ class VRNNCell(tf.nn.rnn_cell.RNNCell):
         return output, output
 
 
-def IRNNCell(num_units, input_size=None, nonlinearity=tf.nn.relu):
+def IRNNCell(num_units, input_size=None, nonlinearity=tf.nn.relu,
+             weightnorm='none'):
     """Gets an IRNN cell as per http://arxiv.org/pdf/1504.00941.pdf
     although with no possibility of scaling the initialisation as
     of yet."""
@@ -157,4 +159,5 @@ def IRNNCell(num_units, input_size=None, nonlinearity=tf.nn.relu):
                     nonlinearity=nonlinearity,
                     hh_init=init.identity_initializer(),
                     xh_init=init.identity_initializer(),
-                    b_init=tf.constant_initializer(0., dtype=tf.float32))
+                    b_init=tf.constant_initializer(0., dtype=tf.float32),
+                    weightnorm=weightnorm)
