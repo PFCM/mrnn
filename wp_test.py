@@ -79,13 +79,31 @@ def inference(input_var, shape, vocab_size, num_steps,
     # set up the cells
     last_size = shape[0]
     cells = []
+    #print('  weightnorm: {}'.format(FLAGS.weightnorm))
+    #print('      nonlin: {}'.format(FLAGS.nonlinearity))
     for layer in shape:
         #cells.append(mrnn.IRNNCell(layer, last_size, tf.nn.elu))
         # cells.append(tf.nn.rnn_cell.BasicRNNCell(layer, last_size))
         #cells.append(tf.nn.rnn_cell.LSTMCell(layer, last_size))
         #cells.append(mrnn.SimpleRandomSparseCell(layer, last_size, .1, nonlinearity=tf.nn.tanh))
-        cells.append(mrnn.VRNNCell(layer, last_size, weightnorm=FLAGS.weightnorm,
-                                   nonlinearity=tf.nn.tanh if FLAGS.nonlinearity == 'tanh' else tf.nn.relu))
+        if FLAGS.nonlinearity == 'tanh':
+            nonlin = tf.nn.tanh
+        elif FLAGS.nonlinearity == 'relu':
+            nonlin = tf.nn.relu
+        elif FLAGS.nonlinearity == 'elu':
+            nonlin = tf.nn.elu
+        else:
+            raise ValueError('unknown nonlin: {}'.format(FLAGS.nonlinearity))
+        if FLAGS.weightnorm == 'flat-norm':
+            # then we shuold be trying a normalised version of the whole concatted matrix
+            cells.append(mrnn.FlatRNNCell(layer, last_size, weightnorm=True,
+                                          nonlinearity=nonlin))
+        elif FLAGS.weightnorm == 'flat-none':
+            cells.append(mrnn.FlatRNNCell(layer, last_size, weightnorm=False,
+                                          nonlinearity=nonlin))
+        else:
+            cells.append(mrnn.VRNNCell(layer, last_size, weightnorm=FLAGS.weightnorm,
+                                       nonlinearity=nonlin))
         last_size = layer
     if dropout != 1.0:  # != rather than < because could be tensor
         cells = [tf.nn.rnn_cell.DropoutWrapper(cell, input_keep_prob=dropout)

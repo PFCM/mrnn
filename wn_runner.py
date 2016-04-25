@@ -7,20 +7,20 @@ import subprocess
 
 data_dir = 'weightnorm_tests'
 
-weightnorm_values = ['none', 'all', 'input', 'recurrent']
-nonlinearity_values = ['tanh', 'relu']
+weightnorm_values = ['full', 'input', 'recurrent', 'none', 'flat-none', 'flat-norm']
+nonlinearity_values = ['tanh', 'relu', 'elu']
 
 program_args = [
     'python',
     'wp_test.py',
     '--width=256',
     '--num_layers=3',
-    '--batch_size=32',
-    '--learning_rate=0.01',
-    '--learning_rate_decay=0.95',
+    '--batch_size=64',
+    '--learning_rate=0.05',
+    '--learning_rate_decay=0.99',
     '--start_decay=10',
-    '--momentum=0.99',
-    '--num_epochs=70',
+    '--momentum=0.95',
+    '--num_epochs=200',
     '--dropout=1.0',
     '--model_prefix=rnn'  # they all get separate folders so it doesn't matter
 ]

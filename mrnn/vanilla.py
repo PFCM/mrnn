@@ -19,7 +19,7 @@ class FlatRNNCell(tf.nn.rnn_cell.RNNCell):
     def __init__(self, num_units, input_size=None,
                  nonlinearity=tf.nn.tanh,
                  W_init=tf.random_normal_initializer(stddev=0.15),
-                 b_init=tf.constant_initializer(1.0, dtype=tf.float32),
+                 b_init=tf.constant_initializer(0.0, dtype=tf.float32),
                  weightnorm=False):
         """set up the cell.
 
@@ -76,7 +76,7 @@ class VRNNCell(tf.nn.rnn_cell.RNNCell):
                  nonlinearity=tf.nn.tanh,
                  hh_init=tf.random_normal_initializer(stddev=0.15),
                  xh_init=tf.random_normal_initializer(stddev=0.15),
-                 b_init=tf.constant_initializer(1.0, dtype=tf.float32),
+                 b_init=tf.constant_initializer(0.0, dtype=tf.float32),
                  weightnorm=False):
         """
         Sets up a cell.
@@ -125,6 +125,7 @@ class VRNNCell(tf.nn.rnn_cell.RNNCell):
                 input_weights = hops.get_weightnormed_matrix(
                     [self.input_size, self.state_size],
                     name='V', V_init=self._xh_init)
+
             else:
                 input_weights = tf.get_variable(
                     'V',
@@ -134,6 +135,7 @@ class VRNNCell(tf.nn.rnn_cell.RNNCell):
                 hidden_weights = hops.get_weightnormed_matrix(
                     [self.state_size, self.state_size],
                     name='W', V_init=self._hh_init)
+
             else:
                 hidden_weights = tf.get_variable(
                     'W',
