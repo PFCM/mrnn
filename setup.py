@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name="mrnn",
-      version="0.0",
+      version="0.1",
       description="mrnn",
       url="",
       author="pfcm",
