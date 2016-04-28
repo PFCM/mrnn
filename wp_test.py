@@ -50,6 +50,7 @@ flags.DEFINE_string('nonlinearity', 'tanh', 'nonlinearity to use. should be '
                                             '"tanh" or "relu"')
 flags.DEFINE_float('momentum', 0.99, 'momentum for the sgd')
 flags.DEFINE_string('rec_init', 'normal', 'wether to use normal or identity for recurrent mat')
+flags.DEFINE_string('cell', 'vanilla', 'cell to use')
 
 FLAGS = flags.FLAGS
 
@@ -98,29 +99,35 @@ def inference(input_var, shape, vocab_size, num_steps,
             nonlin = tf.nn.elu
         else:
             raise ValueError('unknown nonlin: {}'.format(FLAGS.nonlinearity))
-        if FLAGS.weightnorm == 'flat-norm':
-            if FLAGS.rec_init == 'identity':
-                sys.exit(0)  # just bail, we're cool
-            # then we should be trying a normalised version of the whole
-            # concatted matrix
-            cells.append(mrnn.FlatRNNCell(layer, last_size, weightnorm=True,
-                                          nonlinearity=nonlin))
-        elif FLAGS.weightnorm == 'flat-none':
-            if FLAGS.rec_init == 'identity':
-                sys.exit(0)
-            cells.append(mrnn.FlatRNNCell(layer, last_size, weightnorm=False,
-                                          nonlinearity=nonlin))
-        else:
-            if FLAGS.rec_init == 'normal':
-                cells.append(mrnn.VRNNCell(layer, last_size,
-                                           weightnorm=FLAGS.weightnorm,
-                                           nonlinearity=nonlin))
-            elif FLAGS.rec_init == 'identity':
-                cells.append(mrnn.IRNNCell(layer, last_size,
-                                           weightnorm=FLAGS.weightnorm,
-                                           nonlinearity=nonlin))
+        if FLAGS.cell == 'vanilla':
+            if FLAGS.weightnorm == 'flat-norm':
+                if FLAGS.rec_init == 'identity':
+                    sys.exit(0)  # just bail, we're cool
+                # then we should be trying a normalised version of the whole
+                # concatted matrix
+                cells.append(mrnn.FlatRNNCell(layer, last_size, weightnorm=True,
+                                              nonlinearity=nonlin))
+            elif FLAGS.weightnorm == 'flat-none':
+                if FLAGS.rec_init == 'identity':
+                    sys.exit(0)
+                cells.append(mrnn.FlatRNNCell(layer, last_size, weightnorm=False,
+                                              nonlinearity=nonlin))
             else:
-                raise ValueError('unknown init: {}'.format(FLAGS.rec_init))
+                if FLAGS.rec_init == 'normal':
+                    cells.append(mrnn.VRNNCell(layer, last_size,
+                                               weightnorm=FLAGS.weightnorm,
+                                               nonlinearity=nonlin))
+                elif FLAGS.rec_init == 'identity':
+                    cells.append(mrnn.IRNNCell(layer, last_size,
+                                               weightnorm=FLAGS.weightnorm,
+                                               nonlinearity=nonlin))
+                else:
+                    raise ValueError('unknown init: {}'.format(FLAGS.rec_init))
+        elif FLAGS.cell == 'sparse_tensor':
+            print('sparse!')
+            cells.append(mrnn.SimpleRandomSparseCell(layer, last_size, 0.1, nonlin))
+        else:
+            raise ValueError('unknown cell: {}'.format(FLAGS.cell))    
         last_size = layer
     if dropout != 1.0:  # != rather than < because could be tensor
         cells = [tf.nn.rnn_cell.DropoutWrapper(cell, input_keep_prob=dropout)

@@ -68,3 +68,8 @@ class SimpleRandomSparseCell(tf.nn.rnn_cell.RNNCell):
             linears += b
             output = self._nonlinearity(linears)
             return output, output
+
+
+class SimpleRandomSparseCell2(tf.nn.rnn_cell.RNNCell):
+    """As above, but with a more careful implementation"""
+    pass

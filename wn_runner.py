@@ -22,7 +22,7 @@ program_args = [
     '--learning_rate_decay=0.95',
     '--start_decay=10',
     '--momentum=0.95',
-    '--num_epochs=1',
+    '--num_epochs=100',
     '--dropout=1.0',
     '--model_prefix=rnn'  # they all get separate folders so it doesn't matter
 ]
