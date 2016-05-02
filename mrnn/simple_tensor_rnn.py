@@ -44,7 +44,7 @@ class SimpleRandomSparseCell(tf.nn.rnn_cell.RNNCell):
 
     def __call__(self, inputs, states, scope=None):
         with tf.variable_scope(scope or type(self).__name__):
-            # this is the mode-3 matricization of W
+            # this is the mode-3 matricization of W :)
             big_tensor = random_sparse_tensor([self._num_units, self._num_inputs * self._num_units],
                                               self.sparsity, name='W_3')
             u = tf.get_variable('U', [self._num_units, self._num_units])
