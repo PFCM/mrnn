@@ -4,7 +4,7 @@ import os
 import time
 import shutil
 import subprocess
-
+# test comment
 data_dir = 'weightnorm_tests'
 
 weightnorm_values = ['full', 'input', 'recurrent', 'none',
