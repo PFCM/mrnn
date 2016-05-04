@@ -237,7 +237,10 @@ def gen_sample(vocab, probs, input_var, in_state_var, out_state_var,
                length=1000):
     """Gets a sample from the network. Uses the default session."""
     # get an initial state
-    input_data = int(vocab['"'])  # first letter of the book
+    try:
+        input_data = int(vocab['"'])  # first letter of the book
+    except:
+        input_data = int(list(vocab.items())[0][1])
     inverse_vocab = {b: a for a, b in vocab.items()}
     sess = tf.get_default_session()
     sample = ['"']
