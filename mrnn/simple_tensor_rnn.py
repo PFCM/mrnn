@@ -115,7 +115,7 @@ class SimpleCPCell(tf.nn.rnn_cell.RNNCell):
         with tf.variable_scope(scope or type(self).__name__):
             # first we need to get the tensor
             tensor = get_cp_tensor([self._num_units+1,
-                                    self._num_units+1,
+                                    self._num_units,
                                     self._num_inputs+1],
                                    self._rank,
                                    'W_hat',
@@ -124,6 +124,6 @@ class SimpleCPCell(tf.nn.rnn_cell.RNNCell):
                 1, [inputs, tf.ones([inputs.get_shape()[0].value, 1])])
             vec_b = tf.concat(
                 1, [states, tf.ones([inputs.get_shape()[0].value, 1])])
-            result = bilinear_product_cp(vec_a, tensor, vec_b)[:,:self._num_units]
+            result = bilinear_product_cp(vec_a, tensor, vec_b)
             result = self._nonlinearity(result)
             return result, result
