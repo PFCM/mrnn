@@ -50,12 +50,13 @@ def get_cp_tensor(shape, maxrank, name, weightnorm=False, dtype=tf.float32):
         for i, dim in enumerate(shape):
             matrices.append(
                 tf.get_variable('cp_decomp_{}'.format(i),
-                                [maxranks, dim],
+                                [maxrank, dim],
                                 dtype=dtype))
     return tuple(matrices)
 
 
-def bilinear_product_cp(vec_a, tensor, vec_b, batch_major=True):
+def bilinear_product_cp(vec_a, tensor, vec_b, batch_major=True,
+                        name='bilinear_cp'):
     """Does the ops to do a bilinear product of the form:
     $ a^TWb $ where $a$ and $b$ are vectors and $W$ a 3-tensor stored as
     a tuple of three matrices (as per `get_cp_tensor`).
@@ -67,12 +68,39 @@ def bilinear_product_cp(vec_a, tensor, vec_b, batch_major=True):
       vec_a: the vector on the left hand side (although the order shouldn't
         matter).
       tensor: the tensor in the middle. Expected to in fact be a sequence of
-        3 matrices.
+        3 matrices. We assume these are ordered such that if vec_a is shape
+        [a,] and vec_b is shape [b,] then tensor[0] is shape [rank, a],
+        tensor[1] is shape [rank, x] and tensor[2] is shape [rank, b]. The
+        result will be [x,]
       vec_b: the remaining vector.
       batch_major: if true, we expect the data (vec_a and vec_b) to be of
-        shape `[batch_size, -1]`.
+        shape `[batch_size, -1]`, otherwise the opposite.
+      name: a name for the ops
 
-     Returns:
-       the result, either a vector or a matrix depending on batch_major.
-     """
-     pass
+    Returns:
+      the result.
+
+    Raises:
+      ValueError: if the various shapes etc don't line up.
+    """
+    # quick sanity checks
+    if len(tensor) != 3:
+        raise ValueError('Expecting three way decomposed tensor')
+
+    with tf.name_scope(name):
+        # TODO(pfcm) performance evaluation between concatenating these or not
+        # (probably will be faster, but maybe not if we have to do it every
+        # time)
+        # alternative:
+        # prod_a_b = tf.matmul(
+        #     tf.concatenate(1, (tensor[0], tensor[2])),
+        #     tf.concatenate(0, (vec_a, vec_b)))
+        prod_a = tf.matmul(tensor[0], vec_a, transpose_b=batch_major)
+        prod_c = tf.matmul(tensor[2], vec_b, transpose_b=batch_major)
+        # now do these two elementwise
+        prod_b = tf.mul(prod_a, prod_c)
+        # and multiply the result by the remaining matrix in tensor
+        result = tf.matmul(tensor[1], prod_b, transpose_a=True)
+        if batch_major:
+            result = tf.transpose(result)
+    return result
