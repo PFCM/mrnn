@@ -125,9 +125,12 @@ def inference(input_var, shape, vocab_size, num_steps,
                     raise ValueError('unknown init: {}'.format(FLAGS.rec_init))
         elif FLAGS.cell == 'sparse_tensor':
             print('sparse!')
-            cells.append(mrnn.SimpleRandomSparseCell(layer, last_size, 0.1, nonlin))
+            cells.append(mrnn.SimpleRandomSparseCell(layer, last_size, 0.1,
+                                                     nonlin))
+        elif FLAGS.cell == 'simple_cp':
+            cells.append(mrnn.SimpleCPCell(layer, last_size, 100, nonlin, True))
         else:
-            raise ValueError('unknown cell: {}'.format(FLAGS.cell))    
+            raise ValueError('unknown cell: {}'.format(FLAGS.cell))
         last_size = layer
     if dropout != 1.0:  # != rather than < because could be tensor
         cells = [tf.nn.rnn_cell.DropoutWrapper(cell, input_keep_prob=dropout)
@@ -187,7 +190,7 @@ def output_probs(logits):
     return tf.nn.softmax(logits)
 
 
-def train(cost, learning_rate, max_grad_norm=1000000.0):
+def train(cost, learning_rate, max_grad_norm=100000.0):
     """Gets the training op"""
     tvars = tf.trainable_variables()
     grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars),

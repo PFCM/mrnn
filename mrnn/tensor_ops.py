@@ -9,7 +9,7 @@ from __future__ import print_function
 import numpy as np
 import tensorflow as tf
 
-import mrnn.handy_ops
+import mrnn.handy_ops as hops
 
 
 def get_cp_tensor(shape, maxrank, name, weightnorm=False, dtype=tf.float32):
@@ -48,10 +48,16 @@ def get_cp_tensor(shape, maxrank, name, weightnorm=False, dtype=tf.float32):
     with tf.name_scope(name):
         matrices = []
         for i, dim in enumerate(shape):
-            matrices.append(
-                tf.get_variable('cp_decomp_{}'.format(i),
-                                [maxrank, dim],
-                                dtype=dtype))
+            if weightnorm:
+                matrices.append(
+                    hops.get_weightnormed_matrix(
+                        [maxrank, dim],
+                        name='cp_decomp_{}'.format(i)))
+            else:
+                matrices.append(
+                    tf.get_variable('cp_decomp_{}'.format(i),
+                                    [maxrank, dim],
+                                    dtype=dtype))
     return tuple(matrices)
 
 
