@@ -79,7 +79,51 @@ class SimpleRandomSparseCell(tf.nn.rnn_cell.RNNCell):
 
 class SimpleRandomSparseCell2(tf.nn.rnn_cell.RNNCell):
     """As above, but with a more careful implementation"""
-    pass
+    def __init__(self, num_units, num_inputs, sparsity,
+                 nonlinearity=tf.nn.relu):
+        self._num_units = num_units
+        self._num_inputs = num_inputs
+        self._nonlinearity = nonlinearity
+        self._sparsity = sparsity
+
+    @property
+    def sparsity(self):
+        return self._sparsity
+
+    @property
+    def state_size(self):
+        return self._num_units
+
+    @property
+    def input_size(self):
+        return self._num_inputs
+
+    @property
+    def output_size(self):
+        return self._num_units
+
+    def __call__(self, inputs, states, scope=None):
+        with tf.variable_scope(scope or type(self).__name__):
+            # this is the transpose of the mode 1 unfolding
+            # so it should be [statesize * statesize, inputs]
+            tensor = random_sparse_tensor(
+                [(self.state_size+1) * self.output_size, (self.input_size+1)],
+                self.sparsity,
+                name='W')
+            # print('inputs: {}'.format(inputs.get_shape()))
+            # I feel like this shouldn't happen but sometimes it does
+            # if len(inputs.get_shape()) == 1:
+            #     inputs = tf.expand_dims(inputs, 0)
+            batch_ones = tf.ones([inputs.get_shape()[0].value, 1])
+            vec_a = tf.concat(
+                1, [inputs, batch_ones])
+            vec_b = tf.concat(
+                1, [states, batch_ones])
+            activations = bilinear_product_sparse(vec_a, tensor, vec_b,
+                                                  self.output_size,
+                                                  batch_major=True)
+            output = self._nonlinearity(activations)
+            return output, output
 
 
 class SimpleCPCell(tf.nn.rnn_cell.RNNCell):

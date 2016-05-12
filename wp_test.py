@@ -97,6 +97,8 @@ def inference(input_var, shape, vocab_size, num_steps,
             nonlin = tf.nn.relu
         elif FLAGS.nonlinearity == 'elu':
             nonlin = tf.nn.elu
+        elif FLAGS.nonlinearity == 'linear':
+            nonlin = tf.identity
         else:
             raise ValueError('unknown nonlin: {}'.format(FLAGS.nonlinearity))
         if FLAGS.cell == 'vanilla':
@@ -123,10 +125,10 @@ def inference(input_var, shape, vocab_size, num_steps,
                                                nonlinearity=nonlin))
                 else:
                     raise ValueError('unknown init: {}'.format(FLAGS.rec_init))
-        elif FLAGS.cell == 'sparse_tensor':
-            print('sparse!')
-            cells.append(mrnn.SimpleRandomSparseCell(layer, last_size, 0.1,
-                                                     nonlin))
+        elif FLAGS.cell == 'simple_sparse':
+            cells.append(mrnn.SimpleRandomSparseCell2(layer, last_size,
+                                                      layer**2 + last_size,
+                                                      nonlin))
         elif FLAGS.cell == 'simple_cp':
             cells.append(mrnn.SimpleCPCell(layer, last_size, 100, nonlin, True))
         else:
