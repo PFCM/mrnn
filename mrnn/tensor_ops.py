@@ -110,3 +110,6 @@ def bilinear_product_cp(vec_a, tensor, vec_b, batch_major=True,
         if batch_major:
             result = tf.transpose(result)
     return result
+
+
+#def get_tt_tensor(size, 

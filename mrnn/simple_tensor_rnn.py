@@ -112,7 +112,8 @@ class SimpleCPCell(tf.nn.rnn_cell.RNNCell):
 
     def __call__(self, inputs, states, scope=None):
         """does the stuff"""
-        with tf.variable_scope(scope or type(self).__name__):
+        with tf.variable_scope(scope or type(self).__name__,
+                               initializer=tf.random_normal_initializer(stddev=0.1)):
             # first we need to get the tensor
             tensor = get_cp_tensor([self._num_units+1,
                                     self._num_units,

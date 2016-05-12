@@ -23,6 +23,7 @@ flags.DEFINE_string('sample_strategy', 'random', 'how to generate samples'
                                                  'one of `random`, `ml` or'
                                                  '`beam`. Beam search is not '
                                                  'implemented.')
+flags.DEFINE_string('sample_seed', '"', 'a string to start of the rnn when sampling')
 flags.DEFINE_float('learning_rate', 0.001, 'the learning rate')
 flags.DEFINE_integer('num_steps', 100, 'how far to back propagate in time')
 flags.DEFINE_integer('batch_size', 100, 'how many batches')
@@ -128,7 +129,9 @@ def inference(input_var, shape, vocab_size, num_steps,
             cells.append(mrnn.SimpleRandomSparseCell(layer, last_size, 0.1,
                                                      nonlin))
         elif FLAGS.cell == 'simple_cp':
-            cells.append(mrnn.SimpleCPCell(layer, last_size, 100, nonlin, True))
+            cells.append(mrnn.SimpleCPCell(layer, last_size, 10, nonlin, True))
+        elif FLAGS.cell == 'lstm':
+            cells.append(tf.nn.rnn_cell.LSTMCell(layer, forget_bias=1.0))
         else:
             raise ValueError('unknown cell: {}'.format(FLAGS.cell))
         last_size = layer
@@ -237,17 +240,29 @@ def run_epoch(sess, data_iter, initial_state, final_state, cost, train_op,
 
 
 def gen_sample(vocab, probs, input_var, in_state_var, out_state_var,
-               length=1000):
+               length=1000, seed='"'):
     """Gets a sample from the network. Uses the default session."""
     # get an initial state
-    try:
-        input_data = int(vocab['"'])  # first letter of the book
-    except:
-        input_data = int(list(vocab.items())[0][1])
+    seed_list = []
+    for char in seed:
+        if char in vocab:
+            seed_list.append(int(vocab[char]))
+        else:
+            seed_list.append(int(vocab['<UNK>']))
     inverse_vocab = {b: a for a, b in vocab.items()}
     sess = tf.get_default_session()
-    sample = ['"']
-    state = tf.ones_like(in_state_var).eval()
+    sample = list(seed)
+    state = tf.zeros_like(in_state_var).eval()
+
+    # first initialise the rnn by running on given starting point
+    for val in seed_list[:-1]:
+        current_probs, state = sess.run(
+            [probs, out_state_var],
+            {input_var: np.array(val).reshape((1, 1)),
+             in_state_var: state})
+        
+    # then go ahead and generate new things
+    input_data = seed_list[-1]
     for _ in range(length):
         current_probs, state = sess.run(
             [probs, out_state_var],
@@ -328,7 +343,8 @@ def main(_):
                              inputs_1,
                              init_state_1,
                              state_1,
-                             length=FLAGS.sample),
+                             length=FLAGS.sample,
+                             seed=FLAGS.sample_seed),
                   file=sys.stderr)
             return
         print('\n\n{:~>30}'.format('training: '))
