@@ -15,6 +15,25 @@ import mrnn.handy_ops as hops
 logger = logging.getLogger(__name__)
 
 
+def get_sparse_tensor(shape, sparsity, stddev=0.15, name='random-sparse'):
+    """wrapper for more genereal `random_sparse_tensor` function.
+    Accepts a 3D shape that, returns an appropriately unfolded tensor to
+    use with `bilinear_product_sparse`.
+
+    Args:
+        shape: 3 ints, shape of tensor.
+        sparsity: see `random_sparse_tensor`
+        stddev: for initialisation
+        name: name of ops etc.
+
+    Returns:
+        the transpose of the mode one unfolding of a sparse tensor.
+    """
+    assert len(shape) == 3
+    return random_sparse_tensor([shape[1]*shape[2], shape[0]],
+                                sparsity, stddev=stddev, name=name)
+
+
 def random_sparse_tensor(shape, sparsity, stddev=0.15, name='random-sparse'):
     """Returns a sparse tensor with a set sparsity but
     with random indices and values.
@@ -148,7 +167,7 @@ def get_cp_tensor(shape, maxrank, name, weightnorm=False, dtype=tf.float32):
                 matrices.append(
                     tf.get_variable('cp_decomp_{}'.format(i),
                                     [maxrank, dim],
-                                    dtype=dtype))
+                                    dtype=dtype, trainable=True))
     return tuple(matrices)
 
 
