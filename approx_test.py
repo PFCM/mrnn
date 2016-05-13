@@ -99,7 +99,7 @@ def mean_squared_error(a, b):
 
 def get_training_op(loss):
     """Returns an op to minimise the given loss"""
-    opt = tf.train.RMSPropOptimizer(1e-2)
+    opt = tf.train.RMSPropOptimizer(1e-1)
     return opt.minimize(loss)
 
 
@@ -140,26 +140,58 @@ def get_placeholders(batch_size, a_size, b_size, target_size):
     return a_var, b_var, t_var
 
 
+def generate_data_tf(sess, input_a, input_b, producer_output, num):
+    """generates random data using tensorflow (but returns a big np array)
+    
+    Args:
+        sess: tensorflow session to use
+        input_a: the first input variable
+        input_b: the second input variable
+        producer_output: the output of the model
+        num: how many times to run it (ie. how many batches to make)
+    """
+    all_a, all_b, all_out = [], [], []
+    for i in range(num):
+        # shouldn't have to feed anything, tf does all the random
+        a, b, out = sess.run([input_a, input_b, producer_output])
+        all_a.append(a)
+        all_b.append(b)
+        all_out.append(out)
+    return np.concatenate(all_a), np.concatenate(all_b), np.concatenate(all_out)
+
+
 if __name__ == '__main__':
     logging.getLogger().setLevel(logging.INFO)
-    a_size = 5
-    b_size = 5
-    c_size = 5
-    batch_size = 10
+    a_size = 50
+    b_size = 50
+    c_size = 50
+    batch_size = 100
     np.random.seed(18121991)
+    tf.set_random_seed(18121991)
     tensor = np.random.sample((a_size, c_size, b_size))
 
     print('getting model')
     a_var, b_var, t_var = get_placeholders(batch_size, a_size, b_size, c_size)
 
+
+    # get a guy to produce some data
+    with tf.variable_scope('producer'):
+        random_input_a = tf.random_uniform([batch_size, a_size], minval=-1,
+                                           maxval=1)
+        random_input_b = tf.random_uniform([batch_size, b_size], minval=-1,
+                                           maxval=1)
+        producer_outs = get_cp_model(random_input_a, random_input_b, 50, 20)
+    
     with tf.variable_scope('model',
                            initializer=tf.random_normal_initializer(
                                 stddev=0.15)):
         # model_outs = get_affine_model(a_var, b_var, [15, 15, c_size])
-        # model_outs = get_cp_model(a_var, b_var, 5, 20)
-        model_outs = get_sparse_model(a_var, b_var, 5, .1)
+        model_outs = get_cp_model(a_var, b_var, 50, 20)
+        
+        # model_outs = get_sparse_model(a_var, b_var, 5, .1)
         loss_op = mean_squared_error(model_outs, t_var)
         train_op = get_training_op(loss_op)
+
 
     print('starting to train')
     sess = tf.Session()
@@ -168,16 +200,19 @@ if __name__ == '__main__':
     summaries = tf.merge_all_summaries()
     writer = tf.train.SummaryWriter('summaries', sess.graph)
     with sess.as_default():
-        for epoch in range(100):
-            # print('Epoch {}'.format(epoch+1))
+        for epoch in range(10):
+            print('Epoch {}'.format(epoch+1))
             #print('getting training data')
-            a, b, c = generate_data(tensor, 500)
+            a, b, c = generate_data_tf(sess, random_input_a,
+                                       random_input_b, producer_outs, 500)
             av_loss = run_epoch(sess, (a, b, c), (a_var, b_var, t_var),
                                 batch_size, train_op, loss_op)
-            # print('\n  train loss: {}'.format(av_loss))
+            print('\n  train loss: {}'.format(av_loss))
         print()
         # get some unseen data
-        a, b, c = generate_data(tensor, 1000)
+        a, b, c = generate_data_tf(sess, random_input_a,
+                                   random_input_b, producer_outs,
+                                   100)
         av_loss = run_epoch(sess, (a, b, c), (a_var, b_var, t_var),
                             batch_size, tf.no_op(), loss_op)
         print('\ntest loss: {}'.format(av_loss))
