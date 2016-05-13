@@ -13,7 +13,8 @@ logger = logging.getLogger(__name__)
 
 def get_weightnormed_matrix(shape, axis=1, name='weightnorm',
                             V_init=tf.random_normal_initializer(stddev=0.015),
-                            train_gains=True, dtype=tf.float32):
+                            train_gains=True, dtype=tf.float32,
+                            trainable=True):
     """Returns a matrix weightnormed across a given index.
 
     Adds 2 trainable variables:
@@ -31,17 +32,23 @@ def get_weightnormed_matrix(shape, axis=1, name='weightnorm',
         V_init: initialiser for the unnormalised part of the matrix.
         train_gains: if false, gains will be always one.
         dtype: type for the created variables.
+        trainable: whether the matrix should be added to the tensorflow
+            trainable variables collection.
 
     Returns:
-        Tensor: the matrix whose rows or columns will never exceed the learned norm.
+        Tensor: the matrix whose rows or columns will never exceed the learned
+            norm.
     """
     if len(shape) != 2:
-        raise ValueError('Expected two dimensional shape, but it is {}'.format(shape))
+        raise ValueError(
+            'Expected two dimensional shape, but it is {}'.format(shape))
     with tf.name_scope(name):
-        unnormed_w = tf.get_variable(name+'_V', shape, trainable=True,
+        unnormed_w = tf.get_variable(name+'_V', shape,
+                                     trainable=trainable,
                                      initializer=V_init,
                                      dtype=dtype)
-        gains = tf.get_variable(name+'_g', [shape[0], 1], trainable=train_gains,
+        gains = tf.get_variable(name+'_g', [shape[0], 1],
+                                trainable=train_gains,
                                 initializer=tf.constant_initializer(1.0),
                                 dtype=dtype)
         inv_norms = tf.rsqrt(

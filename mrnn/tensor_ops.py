@@ -122,7 +122,8 @@ def bilinear_product_sparse(vec_a, tensor, vec_b, output_size,
     return tf.squeeze(tf.batch_matmul(temp, tf.expand_dims(vec_b, 2)), [2])
 
 
-def get_cp_tensor(shape, maxrank, name, weightnorm=False, dtype=tf.float32):
+def get_cp_tensor(shape, maxrank, name, weightnorm=False, dtype=tf.float32,
+                  trainable=True):
     """Gets the components of a tensor stored in its CP decomposition.
     Rather than `prod(shape)` elements, this form will have
     `sum(maxrank * prod)`.
@@ -150,6 +151,8 @@ def get_cp_tensor(shape, maxrank, name, weightnorm=False, dtype=tf.float32):
         returned matrices. If so then maybe it will learn better?
       dtype: the data type of the resulting matrices (defaults to
         tf.float32)
+      trainable: whether the variables created should be trainable
+        (default True).
 
     Returns:
       tuple of `len(shape)` matrices, with each one of shape `[maxrank x d]`
@@ -162,12 +165,13 @@ def get_cp_tensor(shape, maxrank, name, weightnorm=False, dtype=tf.float32):
                 matrices.append(
                     hops.get_weightnormed_matrix(
                         [maxrank, dim],
-                        name='cp_decomp_{}'.format(i)))
+                        name='cp_decomp_{}'.format(i),
+                        trainable=trainable))
             else:
                 matrices.append(
                     tf.get_variable('cp_decomp_{}'.format(i),
                                     [maxrank, dim],
-                                    dtype=dtype, trainable=True))
+                                    dtype=dtype, trainable=trainable))
     return tuple(matrices)
 
 
@@ -222,4 +226,4 @@ def bilinear_product_cp(vec_a, tensor, vec_b, batch_major=True,
     return result
 
 
-#def get_tt_tensor(size, 
+#def get_tt_tensor(size,
