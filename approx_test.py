@@ -62,6 +62,23 @@ def get_affine_model(input_a, input_b, shape):
     return last_input
 
 
+def get_tt_model(input_a, input_b, output_size, ranks, trainable=True):
+    """Gets a tt approximation.
+
+    Args:
+        input_a: first input placeholder, batch major.
+        input_b: second input placeholder.
+        output_size: middel dimension of tensor.
+        ranks: list of the 2 ranks we need.
+        trainable: whether we should be able to train the variables.
+    """
+    a_size = input_a.get_shape()[1].value
+    b_size = input_b.get_shape()[1].value
+    tensor = tops.get_tt_3_tensor([a_size, output_size, b_size], ranks,
+                                  name='TT_3', trainable=trainable)
+    return tops.bilinear_product_tt_3(input_a, tensor, input_b)
+
+
 def get_cp_model(input_a, input_b, output_size, rank, trainable=True):
     """Gets a cp approximation of an appropriately shaped tensor
 
@@ -167,6 +184,7 @@ def generate_data_tf(sess, input_a, input_b, producer_output, num):
 
 if __name__ == '__main__':
     logging.getLogger().setLevel(logging.INFO)
+    tops.logger.setLevel(logging.INFO)
     a_size = 500
     b_size = 500
     c_size = 500
@@ -182,15 +200,17 @@ if __name__ == '__main__':
     with tf.variable_scope('producer',
                            initializer=tf.random_normal_initializer(
                                stddev=1,
-                               mean=.1,
+                               mean=0,
                                seed=0xabcd)):  # the seed is handy for cheating
         random_input_a = tf.random_uniform([batch_size, a_size], minval=-1,
                                            maxval=1)
         random_input_b = tf.random_uniform([batch_size, b_size], minval=-1,
                                            maxval=1)
 
-        producer_outs = get_cp_model(random_input_a, random_input_b,
-                                     c_size, 200)
+        # producer_outs = get_cp_model(random_input_a, random_input_b,
+        #                             c_size, 20)
+        producer_outs = get_tt_model(random_input_a, random_input_b,
+                                     c_size, [10, 10])
 
     with tf.variable_scope('model',
                            initializer=tf.random_normal_initializer(
@@ -198,7 +218,8 @@ if __name__ == '__main__':
                                 mean=0.0,
                                 seed=0xcafe)):
         # model_outs = get_affine_model(a_var, b_var, [15, 15, c_size])
-        model_outs = get_cp_model(a_var, b_var, c_size, 100)
+        model_outs = get_cp_model(a_var, b_var, c_size, 200)
+        # model_outs = get_tt_model(a_var, b_var, c_size, [20, 20])
 
         # model_outs = get_sparse_model(a_var, b_var, 5, .1)
         loss_op = mean_squared_error(model_outs, t_var)

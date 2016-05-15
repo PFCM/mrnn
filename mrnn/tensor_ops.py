@@ -13,10 +13,66 @@ import tensorflow as tf
 import mrnn.handy_ops as hops
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+
+def get_sparse_subset_tensor(shape, subset_sizes,
+                             initializer=tf.random_normal_initializer(
+                                stddev=0.15)):
+    """Gets the required bits and pieces for a sparse tensor bilinear product
+    with random subsets of the inputs (as opposed to a totally randomly sparse
+    tensor, this will have a kind of rectangular structure).
+
+    Args:
+        shape: the shape of the tensor. We can only make this work for
+            3-tensors so len(shape) should be 3.
+        subset_sizes: the number of random elements to take from each of the
+            inputs. Should be a sequence of length 2.
+        initializer: the initialiser to use for the elements of the tensor.
+
+    Returns:
+        (tensor, idcs_a, idcs_b): all that we need to do the bilinear product
+            later -- the tensor elements as a dense matrix and the indices
+            representing the indices into the input vectors.
+    """
+    # first let's make sure the inputs make sense
+    if len(shape) != 3:
+        raise ValueError(
+            'Can do this with 3-way tensors, got shape {}'.format(shape))
+    if len(subset_sizes) != 2:
+        raise ValueError('subset_sizes needs to be of length two')
+    if subset_sizes[0] > shape[0]:
+        raise ValueError('first subset size greater than specified dimension: '
+                         '{} > {}'.format(subset_sizes[0], shape[0]))
+    if subset_sizes[2] > shape[1]:
+        raise ValueError(
+            'second subset size greater than specified dimension: '
+            '{} > {}'.format(subset_sizes[2], shape[1]))
+    with tf.name_scope(name):
+        # now we need to make some random indices
+        # potentially kinda gross for a little while
+        a_idcs = tf.pack([tf.random_shuffle(tf.range(shape[0]))
+                          for _ in range(shape[1])])
+        b_idcs = tf.pack([tf.random_shuffle(tf.range(shape[2]))
+                          for _ in range(shape[1])])
+        # if we eval these they will be random every time
+        # so we use them as the initialiser to a new variable
+        a_idcs = tf.get_variable('a_idcs',
+                                 initializer=a_idcs[:, :subset_sizes[0]])
+        b_idcs = tf.get_variable('b_idcs',
+                                 initializer=b_idcs[:, :subset_sizes[1]])
+        # we have indices now (lots of them)
+    # now we have to make the coefficients
+    # in total, how many will there be?
+    # TODO (pfcm) finish this
+
+
+def bilinear_product_sparse_subset(input_a, tensor, input_b):
+    pass
 
 
 def get_sparse_tensor(shape, sparsity, stddev=0.15, name='random-sparse'):
-    """wrapper for more genereal `random_sparse_tensor` function.
+    """wrapper for more general `random_sparse_tensor` function.
     Accepts a 3D shape that, returns an appropriately unfolded tensor to
     use with `bilinear_product_sparse`.
 
@@ -226,4 +282,78 @@ def bilinear_product_cp(vec_a, tensor, vec_b, batch_major=True,
     return result
 
 
-#def get_tt_tensor(size,
+def get_tt_3_tensor(size, ranks, weightnorm=False, dtype=tf.float32,
+                    trainable=True, name="TT_3"):
+    """Gets a three way tensor in its TT format (with specified ranks).
+
+    Args:
+        size: list of three ints -- the shape of the tensor.
+        ranks: list of two ints -- the ranks of the cores.
+        weightnorm: whether to try and weight normalise the tensor.
+        dtype: dtype for the resulting tensor.
+        trainable: whether it should be added to tensorflow's trainable
+            variables collection.
+        name: a name to prepend to all the variable names.
+
+    Returns:
+        (A, B, C): the three cores. A is [shape[0], ranks[0]],
+            B is [shape[1], ranks[0] x ranks[1]] and C is
+            [shape[2], ranks[1]].
+    """
+    # let's make sure it makes sense to continue
+    if len(size) != 3:
+        raise ValueError(
+            'can only work with 3-tensor, got shape: {}'.format(size))
+    if len(ranks) != 2:
+        raise ValueError('too many ranks: {}'.format(ranks))
+
+    logging.info(
+        '(tt_3) will have %d params',
+        size[0]*ranks[0] + size[1]*ranks[0]*ranks[1] + size[2]*ranks[1])
+    logging.info('(tt_3) explicit would have had %d',
+                 size[0]*size[1]*size[2])
+
+    with tf.name_scope(name):
+        core_a = tf.get_variable(name+'_A', [size[0], ranks[0]])
+        core_b = tf.get_variable(name+'_B', [size[1], ranks[0]*ranks[1]])
+        core_c = tf.get_variable(name+'_C', [size[2], ranks[1]])
+    return core_a, core_b, core_c
+
+
+def bilinear_product_tt_3(input_a, tensor, input_b, name='bilinear_tt3',
+                          batch_major=True):
+    """Does a bilinear product with two vectors and the a tensor from
+    `get_tt_3_tensor`.
+
+    Args:
+        input_a: `[batch_size, I]` input tensor (or transpose if batch_major is
+            false)
+        tensor: tuple of cores representing the decomposed tensor.
+        input_b: `[batch_size, K]` input tensor as per input_a.
+        name: a name under which to add the ops
+        batch_major: if true, then the first index of the inputs is assumed to
+            be the number of features, not the batch size.
+
+    Returns:
+        `[batch_size, J]` batch of vectors.
+    """
+    # first squish the inputs into the respective rank-spaces
+    with tf.name_scope(name):
+        # if batch major these work out nice, otherwise we have to transpose
+        x_A = tf.matmul(input_a, tensor[0], transpose_a=not batch_major)
+        y_C = tf.matmul(input_b, tensor[2], transpose_a=not batch_major)
+        r_1 = tensor[0].get_shape()[1].value
+        r_2 = tensor[2].get_shape()[1].value
+        # now we just do a classic bilinear product in the new smaller space
+        # first step is get the outer product of the above
+        # this is slightly complicated by the presence of the batch dimension
+        x_A = tf.expand_dims(x_A, 2)
+        y_C = tf.expand_dims(y_C, 1)
+        # do the outer products and then flatten
+        outer = tf.reshape(tf.batch_matmul(x_A, y_C),
+                           [x_A.get_shape()[0].value,
+                            r_1 * r_2])
+        # now we can do the bilinear product across the whole batch as a single
+        # matmul
+        result = tf.matmul(tensor[1], outer, transpose_b=True)
+        return tf.transpose(result)
