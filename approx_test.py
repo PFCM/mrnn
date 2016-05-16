@@ -118,8 +118,10 @@ def mean_squared_error(a, b):
 
 def get_training_op(loss):
     """Returns an op to minimise the given loss"""
-    # opt = tf.train.RMSPropOptimizer(1e-2)
-    opt = tf.train.GradientDescentOptimizer(0.0001)
+    # opt = tf.train.RMSPropOptimizer(1e-4)
+    # opt = tf.train.AdadeltaOptimizer(1e-2)
+    # opt = tf.train.AdamOptimizer(1e-1)
+    opt = tf.train.GradientDescentOptimizer(0.001)
     return opt.minimize(loss)
 
 
@@ -185,9 +187,9 @@ def generate_data_tf(sess, input_a, input_b, producer_output, num):
 if __name__ == '__main__':
     logging.getLogger().setLevel(logging.INFO)
     tops.logger.setLevel(logging.INFO)
-    a_size = 500
-    b_size = 500
-    c_size = 500
+    a_size = 50
+    b_size = 50
+    c_size = 50
     batch_size = 32
     np.random.seed(18121991)
     tf.set_random_seed(18121991)
@@ -199,27 +201,28 @@ if __name__ == '__main__':
     # get a guy to produce some data
     with tf.variable_scope('producer',
                            initializer=tf.random_normal_initializer(
-                               stddev=1,
+                               stddev=.1,
                                mean=0,
-                               seed=0xabcd)):  # the seed is handy for cheating
+                               seed=0xcafe)):  # the seed is handy for cheating
         random_input_a = tf.random_uniform([batch_size, a_size], minval=-1,
                                            maxval=1)
         random_input_b = tf.random_uniform([batch_size, b_size], minval=-1,
                                            maxval=1)
 
-        # producer_outs = get_cp_model(random_input_a, random_input_b,
-        #                             c_size, 20)
-        producer_outs = get_tt_model(random_input_a, random_input_b,
-                                     c_size, [10, 10])
+        producer_outs = get_cp_model(random_input_a, random_input_b,
+                                     c_size, 50, trainable=False)
+        #producer_outs = get_tt_model(random_input_a, random_input_b,
+        #                             c_size, [4, 4], trainable=False)
 
     with tf.variable_scope('model',
                            initializer=tf.random_normal_initializer(
-                                stddev=.15,
-                                mean=0.0,
-                                seed=0xcafe)):
+                                stddev=1,
+                                mean=0,
+                                seed=0xdeaf)):
         # model_outs = get_affine_model(a_var, b_var, [15, 15, c_size])
-        model_outs = get_cp_model(a_var, b_var, c_size, 200)
-        # model_outs = get_tt_model(a_var, b_var, c_size, [20, 20])
+
+        # model_outs = get_cp_model(a_var, b_var, c_size, 200)
+        model_outs = get_tt_model(a_var, b_var, c_size, [20, 20])
 
         # model_outs = get_sparse_model(a_var, b_var, 5, .1)
         loss_op = mean_squared_error(model_outs, t_var)
@@ -240,11 +243,11 @@ if __name__ == '__main__':
         print('\\\\\\\\\\\\\\\\\\\\\\')
         print('Baseline error: {}'.format(av_loss))
         print('/////////////')
-        for epoch in range(100):
+        for epoch in range(200):
             print('Epoch {}'.format(epoch+1))
             # print('getting training data')
             a, b, c = generate_data_tf(sess, random_input_a,
-                                       random_input_b, producer_outs, 1024)
+                                       random_input_b, producer_outs, 4096)
             av_loss = run_epoch(sess, (a, b, c), (a_var, b_var, t_var),
                                 batch_size, train_op, loss_op)
             print('\n  train loss: {}'.format(av_loss))
