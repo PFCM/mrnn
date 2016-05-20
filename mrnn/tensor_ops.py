@@ -317,7 +317,7 @@ def get_tt_3_tensor(size, ranks, weightnorm=False, dtype=tf.float32,
         core_a = tf.get_variable(name+'_A', [size[0], ranks[0]])
         core_b = tf.get_variable(name+'_B', [size[1], ranks[0]*ranks[1]])
         core_c = tf.get_variable(name+'_C', [size[2], ranks[1]])
-    return core_a, core_b, core_c
+    return core_a, core_b, core_c, ranks
 
 
 def bilinear_product_tt_3(input_a, tensor, input_b, name='bilinear_tt3',
@@ -342,8 +342,8 @@ def bilinear_product_tt_3(input_a, tensor, input_b, name='bilinear_tt3',
         # if batch major these work out nice, otherwise we have to transpose
         x_A = tf.matmul(input_a, tensor[0], transpose_a=not batch_major)
         y_C = tf.matmul(input_b, tensor[2], transpose_a=not batch_major)
-        r_1 = tensor[0].get_shape()[1].value
-        r_2 = tensor[2].get_shape()[1].value
+        r_1 = tensor[-1][0]
+        r_2 = tensor[-1][1]
         # now we just do a classic bilinear product in the new smaller space
         # first step is get the outer product of the above
         # this is slightly complicated by the presence of the batch dimension
@@ -351,7 +351,7 @@ def bilinear_product_tt_3(input_a, tensor, input_b, name='bilinear_tt3',
         y_C = tf.expand_dims(y_C, 1)
         # do the outer products and then flatten
         outer = tf.reshape(tf.batch_matmul(x_A, y_C),
-                           [x_A.get_shape()[0].value,
+                           [-1, #x_A.get_shape()[0].value,
                             r_1 * r_2])
         # now we can do the bilinear product across the whole batch as a single
         # matmul

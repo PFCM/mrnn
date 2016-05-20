@@ -127,13 +127,18 @@ def inference(input_var, shape, vocab_size, num_steps,
                 else:
                     raise ValueError('unknown init: {}'.format(FLAGS.rec_init))
         elif FLAGS.cell == 'simple_sparse':
+            print('sparse!')
             cells.append(mrnn.SimpleRandomSparseCell2(layer, last_size,
                                                       layer**2 + last_size,
                                                       nonlin))
         elif FLAGS.cell == 'simple_cp':
-            cells.append(mrnn.SimpleCPCell(layer, last_size, 10, nonlin, True))
+            print('cp factored')
+            cells.append(mrnn.SimpleCPCell(layer, last_size, layer, nonlin, True))
         elif FLAGS.cell == 'lstm':
             cells.append(tf.nn.rnn_cell.LSTMCell(layer, forget_bias=1.0))
+        elif FLAGS.cell == 'simple_tt':
+            print('tt')
+            cells.append(mrnn.SimpleTTCell(layer, last_size, [50, 50], nonlin))
         else:
             raise ValueError('unknown cell: {}'.format(FLAGS.cell))
         last_size = layer
@@ -222,9 +227,10 @@ def fill_feed(batch, input_var, target_var):
 
 
 def run_epoch(sess, data_iter, initial_state, final_state, cost, train_op,
-              input_var, target_var):
+              input_var, target_var, state_reset=0):
     """Runs an epoch, pulling from data_iter until it is empty."""
-
+    if state_reset > 0 and not initial_state:
+        raise ValueError("Can't reset the state without anything to reset it to")
     # get into it
     costs = 0
     steps = 0

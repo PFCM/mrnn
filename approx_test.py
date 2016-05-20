@@ -201,22 +201,22 @@ if __name__ == '__main__':
     # get a guy to produce some data
     with tf.variable_scope('producer',
                            initializer=tf.random_normal_initializer(
-                               stddev=.1,
+                               stddev=1/(np.sqrt(a_size)*np.sqrt(b_size)*np.sqrt(c_size)),
                                mean=0,
                                seed=0xcafe)):  # the seed is handy for cheating
-        random_input_a = tf.random_uniform([batch_size, a_size], minval=-1,
-                                           maxval=1)
-        random_input_b = tf.random_uniform([batch_size, b_size], minval=-1,
-                                           maxval=1)
+        random_input_a = tf.random_uniform([batch_size, a_size], minval=-1.732,
+                                           maxval=1.732)
+        random_input_b = tf.random_uniform([batch_size, b_size], minval=-1.732,
+                                           maxval=1.732)
 
-        producer_outs = get_cp_model(random_input_a, random_input_b,
-                                     c_size, 50, trainable=False)
-        #producer_outs = get_tt_model(random_input_a, random_input_b,
-        #                             c_size, [4, 4], trainable=False)
+        #producer_outs = get_cp_model(random_input_a, random_input_b,
+        #                             c_size, 50, trainable=False)
+        producer_outs = get_tt_model(random_input_a, random_input_b,
+                                     c_size, [4, 4], trainable=False)
 
     with tf.variable_scope('model',
                            initializer=tf.random_normal_initializer(
-                                stddev=1,
+                                stddev=1/(np.sqrt(a_size)*np.sqrt(b_size)*np.sqrt(c_size)),
                                 mean=0,
                                 seed=0xdeaf)):
         # model_outs = get_affine_model(a_var, b_var, [15, 15, c_size])

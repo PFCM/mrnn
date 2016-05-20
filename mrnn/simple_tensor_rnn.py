@@ -172,3 +172,84 @@ class SimpleCPCell(tf.nn.rnn_cell.RNNCell):
             result = bilinear_product_cp(vec_a, tensor, vec_b)
             result = self._nonlinearity(result)
             return result, result
+
+
+class SimpleTTCell(tf.nn.rnn_cell.RNNCell):
+    """Simple RNN cell using the tensor stored in TT format"""
+
+    def __init__(self, num_outputs, num_inputs, ranks,
+                 nonlinearity=tf.nn.tanh, separate_pad=True):
+        """make the thing.
+
+        Args:
+          num_outputs: how many outputs this layer should have. Also
+            the size of the hidden state.
+          num_inputs: how many inputs this layer has.
+          ranks: a sequence of two integers defining the TT ranks of
+            the approximation.
+          nonlinearity: some kind of function we can apply elementwise
+            to the output. This just happens to the output, we don't
+            use this class to experiment with pushing it around.
+          separate_pad: if False, we add ones to the input and state
+            and make the weights bigger. If True, we pull these components
+            out and treat them separately, which may aid learning.
+        """
+        self._num_outputs = num_outputs
+        self._num_inputs = num_inputs
+        self._nonlin = nonlinearity
+        self._separate_pad = separate_pad
+        if len(ranks) != 2:
+            raise ValueError('Need two ranks, got: {}'.format(ranks))
+        self._ranks = ranks
+
+    @property
+    def ranks(self):
+        return self._ranks
+
+    @property
+    def state_size(self):
+        return self._num_outputs
+
+    @property
+    def input_size(self):
+        return self._num_inputs
+
+    @property
+    def output_size(self):
+        return self._num_outputs
+
+    def __call__(self, inputs, states, scope=None):
+        with tf.variable_scope(
+                scope or type(self).__name__,
+                initializer=tf.random_normal_initializer(stddev=0.01)):
+            # get the tensor
+            if self._separate_pad:
+                t_shape = [self._num_outputs,
+                           self._num_outputs,
+                           self._num_inputs]
+                vec_a = inputs
+                vec_b = states
+            else:
+                t_shape = [self._num_outputs+1,
+                           self._num_outputs,
+                           self._num_inputs+1]
+                vec_a = tf.concat(
+                    1, [inputs, tf.ones([inputs.get_shape()[0].value, 1])])
+                vec_b = tf.concat(
+                    1, [inputs, tf.ones([inputs.get_shape()[0].value, 1])])
+            tensor = get_tt_3_tensor(t_shape, self._ranks, name='W')
+            result = bilinear_product_tt_3(vec_a, tensor, vec_b)
+            if self._separate_pad:
+                # TODO possible weightnorm
+                D = tf.get_variable('D', [self._num_inputs, self._num_outputs],
+                                    initializer=tf.uniform_unit_scaling_initializer(1.2))
+                E = tf.get_variable('E', [self._num_outputs, self._num_outputs],
+                                    initializer=tf.uniform_unit_scaling_initializer(1.2))
+                b = tf.get_variable('b', [self._num_outputs],
+                                    initializer=tf.constant_initializer(0.0))
+                z = tf.nn.bias_add(tf.matmul(inputs, D) + tf.matmul(states, E), b)
+                result = result + z
+                
+            result = self._nonlin(result)
+            return result, result
+    

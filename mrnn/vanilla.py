@@ -134,7 +134,7 @@ class VRNNCell(tf.nn.rnn_cell.RNNCell):
             if self._weightnorm == 'full' or self._weightnorm == 'recurrent':
                 hidden_weights = hops.get_weightnormed_matrix(
                     [self.state_size, self.state_size],
-                    name='W', V_init=self._hh_init)
+                    name='W', V_init=self._hh_init, axis=None) # nb, axis = None is just for one run!
 
             else:
                 hidden_weights = tf.get_variable(

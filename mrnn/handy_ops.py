@@ -54,6 +54,6 @@ def get_weightnormed_matrix(shape, axis=1, name='weightnorm',
         inv_norms = tf.rsqrt(
             tf.reduce_sum(
                 tf.square(unnormed_w),
-                reduction_indices=1,
+                reduction_indices=axis,
                 keep_dims=True))
         return gains * unnormed_w * inv_norms
