@@ -131,12 +131,14 @@ class SimpleCPCell(tf.nn.rnn_cell.RNNCell):
     CP approximation of given rank."""
 
     def __init__(self, num_units, num_inputs, rank,
-                 nonlinearity=tf.nn.relu, weightnorm=False):
+                 nonlinearity=tf.nn.relu, weightnorm=False,
+                 separate_pad=True):
         self._num_units = num_units
         self._num_inputs = num_inputs
         self._rank = rank
         self._nonlinearity = nonlinearity
         self._weightnorm = weightnorm
+        self._separate_pad = separate_pad
 
     @property
     def rank(self):
@@ -157,19 +159,53 @@ class SimpleCPCell(tf.nn.rnn_cell.RNNCell):
     def __call__(self, inputs, states, scope=None):
         """does the stuff"""
         with tf.variable_scope(scope or type(self).__name__,
-                               initializer=tf.random_normal_initializer(stddev=0.1)):
+                               initializer=tf.uniform_unit_scaling_initializer(1.5)):
             # first we need to get the tensor
-            tensor = get_cp_tensor([self._num_units+1,
-                                    self._num_units,
-                                    self._num_inputs+1],
+            if self._separate_pad:
+                shape = [self._num_units+1,
+                         self._num_units,
+                         self._num_inputs+1]
+                
+                vec_a = tf.concat(
+                    1, [inputs, tf.ones([inputs.get_shape()[0].value, 1])])
+                vec_b = tf.concat(
+                    1, [states, tf.ones([inputs.get_shape()[0].value, 1])])
+            else:
+                shape = [self._num_units+1,
+                         self._num_units,
+                         self._num_inputs+1]
+                vec_a, vec_b = inputs, states
+            
+            tensor = get_cp_tensor(shape,
                                    self._rank,
-                                   'W_hat',
+                                   'W',
                                    weightnorm=self._weightnorm)
-            vec_a = tf.concat(
-                1, [inputs, tf.ones([inputs.get_shape()[0].value, 1])])
-            vec_b = tf.concat(
-                1, [states, tf.ones([inputs.get_shape()[0].value, 1])])
             result = bilinear_product_cp(vec_a, tensor, vec_b)
+
+            if not self._separate_pad:
+                # TODO: inits
+                # should we roll these up into one matmul?
+                # probably will be faster
+                if self._weightnorm:
+                    in_weights = get_weightnormed_matrix(
+                        [self._num_inputs, self._num_units],
+                        name='input_weights')
+                    rec_weights = get_weightnormed_matrix(
+                        [self._num_units, self._num_units],
+                        name='recurrent_weights')
+                else:
+                    in_weights = tf.get_variable(
+                        [self._num_inputs, self._num_units],
+                        name='input_weights')
+                    rec_weights = tf.get_variable(
+                        [self._num_units, self._num_units],
+                        name='recurrent_weights')
+                bias = tf.get_variable([self._num_units],
+                                       initializer=tf.constant_initializer(0.0))
+                result += tf.bias_add(
+                    tf.matmul(vec_a, in_weights) + tf.matmul(vec_b, rec_weights),
+                    bias)
+            
             result = self._nonlinearity(result)
             return result, result
 

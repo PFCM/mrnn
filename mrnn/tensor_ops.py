@@ -357,3 +357,4 @@ def bilinear_product_tt_3(input_a, tensor, input_b, name='bilinear_tt3',
         # matmul
         result = tf.matmul(tensor[1], outer, transpose_b=True)
         return tf.transpose(result)
+
