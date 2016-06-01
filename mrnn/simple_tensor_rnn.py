@@ -18,6 +18,8 @@ import tensorflow as tf
 from mrnn.handy_ops import *
 from mrnn.tensor_ops import *
 
+import mrnn.init as init
+
 
 class SimpleRandomSparseCell(tf.nn.rnn_cell.RNNCell):
     """Implements the above with a random sparse W.
@@ -159,9 +161,9 @@ class SimpleCPCell(tf.nn.rnn_cell.RNNCell):
     def __call__(self, inputs, states, scope=None):
         """does the stuff"""
         with tf.variable_scope(scope or type(self).__name__,
-                               initializer=tf.uniform_unit_scaling_initializer(1.5)):
+                               initializer=tf.random_normal_initializer(stddev=0.0001)):
             # first we need to get the tensor
-            if self._separate_pad:
+            if not self._separate_pad:
                 shape = [self._num_units+1,
                          self._num_units,
                          self._num_inputs+1]
@@ -171,9 +173,9 @@ class SimpleCPCell(tf.nn.rnn_cell.RNNCell):
                 vec_b = tf.concat(
                     1, [states, tf.ones([inputs.get_shape()[0].value, 1])])
             else:
-                shape = [self._num_units+1,
+                shape = [self._num_units,
                          self._num_units,
-                         self._num_inputs+1]
+                         self._num_inputs]
                 vec_a, vec_b = inputs, states
             
             tensor = get_cp_tensor(shape,
@@ -182,7 +184,7 @@ class SimpleCPCell(tf.nn.rnn_cell.RNNCell):
                                    weightnorm=self._weightnorm)
             result = bilinear_product_cp(vec_a, tensor, vec_b)
 
-            if not self._separate_pad:
+            if self._separate_pad:
                 # TODO: inits
                 # should we roll these up into one matmul?
                 # probably will be faster
@@ -192,17 +194,23 @@ class SimpleCPCell(tf.nn.rnn_cell.RNNCell):
                         name='input_weights')
                     rec_weights = get_weightnormed_matrix(
                         [self._num_units, self._num_units],
-                        name='recurrent_weights')
+                        name='recurrent_weights',
+                        V_init=init.identity_initializer())
                 else:
                     in_weights = tf.get_variable(
+                        'input_weights',
                         [self._num_inputs, self._num_units],
-                        name='input_weights')
+                        tf.float32,
+                        initializer=tf.uniform_unit_scaling_initializer())
                     rec_weights = tf.get_variable(
+                        'recurrent_weights',
                         [self._num_units, self._num_units],
-                        name='recurrent_weights')
-                bias = tf.get_variable([self._num_units],
+                        tf.float32,
+                        initializer=init.identity_initializer())
+                bias = tf.get_variable('bias',
+                                       [self._num_units],
                                        initializer=tf.constant_initializer(0.0))
-                result += tf.bias_add(
+                result += tf.nn.bias_add(
                     tf.matmul(vec_a, in_weights) + tf.matmul(vec_b, rec_weights),
                     bias)
             
