@@ -47,7 +47,7 @@ class AdditiveCPCell(tf.nn.rnn_cell.RNNCell):
             # sub scope for the tensor init
             # should inherit reuse from outer scope
             with tf.variable_scope('tensor',
-                                   initializer=init.spectral_normalised_init()):
+                                   initializer=init.spectral_normalised_init(1.5)):
                 tensor = get_cp_tensor([self.input_size,
                                         self.output_size,
                                         self.state_size],

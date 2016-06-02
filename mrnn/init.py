@@ -28,3 +28,12 @@ def identity_initializer():
         else:
             raise
     return _initializer
+
+
+def spectral_normalised_init(factor=1.0):
+    """Random uniform divided by its largest singular value"""
+    def _initializer(shape, dtype=tf.float32):
+        data = np.random.uniform(-1.0, 1.0, shape)
+        svs = np.linalg.svd(data, compute_uv=False)
+        return (data / (factor * np.abs(svs[0]))).astype(np.float32)
+    return _initializer
