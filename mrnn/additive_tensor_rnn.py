@@ -1,0 +1,69 @@
+"""An idea for a cell somewhat inspired by resnets/lstms
+but incorporating a generalised two-way connection"""
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+import numpy as np
+import tensorflow as tf
+
+from mrnn.handy_ops import *
+from mrnn.tensor_ops import *
+
+import mrnn.init as init
+
+
+class AdditiveCPCell(tf.nn.rnn_cell.RNNCell):
+    """Uses a CP decomposition to factorise the tensor"""
+
+    def __init__(self, num_units, num_inputs, rank,
+                 input_projection=None,
+                 nonlinearity=tf.nn.relu):
+        self._num_units = num_units
+        self._num_inputs = num_inputs
+        self._nonlinearity = nonlinearity
+        self._rank = rank
+        self._input_projection = input_projection or num_inputs
+
+    @property
+    def rank(self):
+        return self._rank
+
+    @property
+    def state_size(self):
+        return self._num_units
+
+    @property
+    def input_size(self):
+        return self._num_inputs
+
+    @property
+    def output_size(self):
+        return self._num_units
+
+    def __call__(self, inputs, states, scope=None):
+        with tf.variable_scope(scope or type(self).__name__) as outer_scope:
+            # do it
+            # sub scope for the tensor init
+            # should inherit reuse from outer scope
+            with tf.variable_scope('tensor',
+                                   initializer=init.spectral_normalised_init()):
+                tensor = get_cp_tensor([self.input_size,
+                                        self.output_size,
+                                        self.state_size],
+                                       self.rank,
+                                       'W',
+                                       weightnorm=False,
+                                       trainable=True)
+            combination = bilinear_product_cp(inputs, tensor, states)
+            # and project the input
+            input_weights = tf.get_variable('U', shape=[self.input_size,
+                                                        self._input_projection],
+                                            initializer=tf.uniform_unit_scaling_initializer(1.4))
+            input_proj = tf.matmul(inputs, input_weights)
+            # apply a bias pre-nonlinearity
+            bias = tf.get_variable('b', shape=[self.output_size],
+                                   initializer=tf.constant_initializer(0.0))
+            result = self._nonlinearity(combination + input_proj + bias)
+            result = result + states
+        return result, result
