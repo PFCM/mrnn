@@ -5,6 +5,7 @@ from __future__ import division
 from __future__ import print_function
 
 import logging
+import os
 
 import numpy as np
 import tensorflow as tf
@@ -12,6 +13,36 @@ import tensorflow as tf
 import mrnn.tensor_ops as tops
 
 logger = logging.getLogger(__name__)
+
+RANKS = [
+    1, 5, 25, 50, 75, 100, 125, 200,
+    [1, 1],
+    [3, 3],
+    [8, 8],
+    [11, 11],
+    [14, 14],
+    [16, 16],
+    [18, 18],
+    [24, 24]
+]
+TARGETS = [
+    # 100,
+    [16, 16]
+]
+
+
+def get_path(root, target_shape, cp_target, model_shape, cp_model):
+    """Gets apath to write summaries to"""
+    if cp_target:
+        target = 'cp{}'.format(target_shape)
+    else:
+        target = 'tt{}'.format(target_shape[0])
+    if cp_model:
+        model = 'cp{}'.format(model_shape)
+    else:
+        model = 'tt{}'.format(model_shape[0])
+
+    return os.path.join(root, target, model)
 
 
 def generate_data(tensor, num):
@@ -116,13 +147,13 @@ def mean_squared_error(a, b):
     return tf.reduce_mean(tf.squared_difference(a, b))
 
 
-def get_training_op(loss):
+def get_training_op(learning_rate, loss, global_step):
     """Returns an op to minimise the given loss"""
     # opt = tf.train.RMSPropOptimizer(1e-4)
     # opt = tf.train.AdadeltaOptimizer(1e-2)
     # opt = tf.train.AdamOptimizer(1e-1)
-    opt = tf.train.GradientDescentOptimizer(0.001)
-    return opt.minimize(loss)
+    opt = tf.train.GradientDescentOptimizer(learning_rate)
+    return opt.minimize(loss, global_step=global_step)
 
 
 def batch_sequence(batch_size, *items):
@@ -136,17 +167,27 @@ def batch_sequence(batch_size, *items):
                for item in items]
 
 
-def run_epoch(sess, data, placeholders, batch_size, train_op, loss_op):
+def run_epoch(sess, data, placeholders, batch_size, train_op, loss_op,
+              all_summaries=None, summary_writer=None, global_step=None):
     """runs on some data, reports back the average loss"""
     a_var, b_var, t_var = placeholders
     total_loss = 0
     steps = 0
     for a, b, targets in batch_sequence(batch_size, *data):
-        loss, _ = sess.run([loss_op, train_op],
-                           {a_var: a,
-                            b_var: b,
-                            t_var: targets})
-        print(' loss: {:.6f}'.format(loss), end='', flush=True)
+        if all_summaries is not None and steps % 16 == 0:
+            loss, summs, _ = sess.run([loss_op, all_summaries, train_op],
+                                      {a_var: a,
+                                       b_var: b,
+                                       t_var: targets})
+            print(' loss: {:.6f}'.format(loss), end='', flush=True)
+            summary_writer.add_summary(summs,
+                                       global_step=global_step.eval(sess))
+        else:
+            loss, _ = sess.run([loss_op, train_op],
+                               {a_var: a,
+                                b_var: b,
+                                t_var: targets})
+            print(' loss: {:.6f}'.format(loss), end='', flush=True)
         total_loss += loss
         steps += 1
     return total_loss / steps
@@ -184,16 +225,31 @@ def generate_data_tf(sess, input_a, input_b, producer_output, num):
             np.concatenate(all_out))
 
 
-if __name__ == '__main__':
+def main(model_shape, target_shape, logpath):
     logging.getLogger().setLevel(logging.INFO)
     tops.logger.setLevel(logging.INFO)
-    a_size = 50
-    b_size = 50
-    c_size = 50
+    a_size = 100
+    b_size = 100
+    c_size = 100
     batch_size = 32
     np.random.seed(18121991)
     tf.set_random_seed(18121991)
-    tensor = np.random.sample((a_size, c_size, b_size))
+
+    try:
+        l = len(model_shape)
+        model_is_cp = False
+        print('Model is tt')
+    except:
+        model_is_cp = True
+        print('Model is cp')
+
+    try:
+        l = len(target_shape)
+        target_is_cp = False
+        print('Target is tt')
+    except:
+        target_is_cp = True
+        print('Target is cp')
 
     print('getting model')
     a_var, b_var, t_var = get_placeholders(batch_size, a_size, b_size, c_size)
@@ -201,39 +257,50 @@ if __name__ == '__main__':
     # get a guy to produce some data
     with tf.variable_scope('producer',
                            initializer=tf.random_normal_initializer(
-                               stddev=1/(np.sqrt(a_size)*np.sqrt(b_size)*np.sqrt(c_size)),
+                               stddev=1/10,
                                mean=0,
                                seed=0xcafe)):  # the seed is handy for cheating
-        random_input_a = tf.random_uniform([batch_size, a_size], minval=-1.732,
-                                           maxval=1.732)
-        random_input_b = tf.random_uniform([batch_size, b_size], minval=-1.732,
-                                           maxval=1.732)
+        random_input_a = tf.random_uniform([batch_size, a_size], minval=-1.0,
+                                           maxval=1.0)
+        random_input_b = tf.random_uniform([batch_size, b_size], minval=-1.0,
+                                           maxval=1.0)
 
-        #producer_outs = get_cp_model(random_input_a, random_input_b,
-        #                             c_size, 50, trainable=False)
-        producer_outs = get_tt_model(random_input_a, random_input_b,
-                                     c_size, [4, 4], trainable=False)
+        if target_is_cp:
+            producer_outs = get_cp_model(random_input_a, random_input_b,
+                                         c_size, target_shape, trainable=False)
+        else:
+            producer_outs = get_tt_model(random_input_a, random_input_b,
+                                         c_size, target_shape, trainable=False)
 
     with tf.variable_scope('model',
                            initializer=tf.random_normal_initializer(
-                                stddev=1/(np.sqrt(a_size)*np.sqrt(b_size)*np.sqrt(c_size)),
+                                stddev=1/10,
                                 mean=0,
                                 seed=0xdeaf)):
         # model_outs = get_affine_model(a_var, b_var, [15, 15, c_size])
 
-        # model_outs = get_cp_model(a_var, b_var, c_size, 200)
-        model_outs = get_tt_model(a_var, b_var, c_size, [20, 20])
+        if model_is_cp:
+            model_outs = get_cp_model(a_var, b_var, c_size, model_shape)
+        else:
+            model_outs = get_tt_model(a_var, b_var, c_size, model_shape)
 
         # model_outs = get_sparse_model(a_var, b_var, 5, .1)
+        global_step = tf.Variable(0, dtype=tf.int32, trainable=False)
         loss_op = mean_squared_error(model_outs, t_var)
-        train_op = get_training_op(loss_op)
+        tf.scalar_summary('loss', loss_op)
+        train_op = get_training_op(0.1, loss_op, global_step)
 
     print('starting to train')
     sess = tf.Session()
     sess.run(tf.initialize_all_variables())
 
     summaries = tf.merge_all_summaries()
-    writer = tf.train.SummaryWriter('summaries', sess.graph)
+    writer = tf.train.SummaryWriter(get_path(logpath,
+                                             target_shape,
+                                             target_is_cp,
+                                             model_shape,
+                                             model_is_cp),
+                                    sess.graph)
     with sess.as_default():
         # baseline error
         a, b, c = generate_data_tf(sess, random_input_a,
@@ -249,8 +316,11 @@ if __name__ == '__main__':
             a, b, c = generate_data_tf(sess, random_input_a,
                                        random_input_b, producer_outs, 4096)
             av_loss = run_epoch(sess, (a, b, c), (a_var, b_var, t_var),
-                                batch_size, train_op, loss_op)
+                                batch_size, train_op, loss_op, summaries,
+                                writer, global_step)
             print('\n  train loss: {}'.format(av_loss))
+            if global_step.eval(sess) >= 250000:
+                break
         print()
         # get some unseen data
         a, b, c = generate_data_tf(sess, random_input_a,
@@ -259,3 +329,11 @@ if __name__ == '__main__':
         av_loss = run_epoch(sess, (a, b, c), (a_var, b_var, t_var),
                             batch_size, tf.no_op(), loss_op)
         print('\ntest loss: {}'.format(av_loss))
+        sess.close()
+        tf.reset_default_graph()
+
+
+if __name__ == '__main__':
+    for shape in RANKS:
+        for target in TARGETS:
+            main(shape, target, 'summaries')
