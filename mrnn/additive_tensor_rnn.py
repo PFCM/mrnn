@@ -13,6 +13,78 @@ from mrnn.tensor_ops import *
 import mrnn.init as init
 
 
+class AddSubCPCell(tf.nn.rnn_cell.RNNCell):
+    """Basically difference between two of the below"""
+
+    def __init__(self, num_units, num_inputs, rank,
+                 input_projections=None,
+                 nonlinearity=tf.nn.relu,
+                 tensor_init=init.spectral_normalised_init(0.99)):
+        self._num_units = num_units
+        self._num_inputs = num_inputs
+        self._nonlinearity = nonlinearity
+        self._rank = rank
+        self._input_projection = input_projections or num_inputs
+        self._tensor_init = tensor_init
+
+    @property
+    def rank(self):
+        return self._rank
+
+    @property
+    def state_size(self):
+        return self._num_units
+
+    @property
+    def input_size(self):
+        return self._num_inputs
+
+    @property
+    def output_size(self):
+        return self._num_units
+
+    def __call__(self, inputs, states, scope=None):
+        with tf.variable_scope(scope or type(self).__name__):
+            # get the tensors first
+            with tf.variable_scope('tensor_1',
+                                   initializer=self._tensor_init):
+
+                tensor_1 = get_cp_tensor([self.input_size,
+                                          self.output_size,
+                                          self.state_size],
+                                         self.rank,
+                                         'W1',
+                                         weightnorm=False,
+                                         trainable=True)
+            with tf.variable_scope('tensor_2',
+                                   initializer=self._tensor_init):
+                tensor_2 = get_cp_tensor([self.input_size,
+                                          self.output_size,
+                                          self.state_size],
+                                         self.rank,
+                                         'W2',
+                                         weightnorm=False,
+                                         trainable=True)
+            combo_1 = bilinear_product_cp(inputs, tensor_1, states)
+            combo_2 = bilinear_product_cp(inputs, tensor_2, states)
+
+            input_weights_1 = tf.get_variable('U1', shape=[self.input_size,
+                                                           self._input_projection])
+            input_weights_2 = tf.get_variable('U2', shape=[self.input_size,
+                                                           self._input_projection])
+            input_proj_1 = tf.matmul(inputs, input_weights_1)
+            input_proj_2 = tf.matmul(inputs, input_weights_2)
+            # biases
+            bias1 = tf.get_variable('b1', shape=[self.output_size],
+                                    initializer=tf.constant_initializer(0.0))
+            bias2 = tf.get_variable('b2', shape=[self.output_size],
+                                    initializer=tf.constant_initializer(0.0))
+            positive = self._nonlinearity(combo_1 + input_weights_1 + bias1)
+            negative = self._nonlinearity(combo_2 + input_weights_2 + bias2)
+            result = positive - negative + states
+        return result, result
+
+
 class AdditiveCPCell(tf.nn.rnn_cell.RNNCell):
     """Uses a CP decomposition to factorise the tensor"""
 
@@ -47,7 +119,7 @@ class AdditiveCPCell(tf.nn.rnn_cell.RNNCell):
             # sub scope for the tensor init
             # should inherit reuse from outer scope
             with tf.variable_scope('tensor',
-                                   initializer=init.spectral_normalised_init(1.5)):
+                                   initializer=init.spectral_normalised_init(1.1)):
                 tensor = get_cp_tensor([self.input_size,
                                         self.output_size,
                                         self.state_size],
