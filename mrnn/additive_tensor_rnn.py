@@ -43,21 +43,21 @@ class CPDeltaCell(tf.nn.rnn_cell.RNNCell):
                                             [self.input_size,
                                              self.state_size])
             input_bias = tf.get_variable('input_bias', [self.state_size])
-            input_adjustment = tf.nn.relu(
-                tf.nn.bias_add(tf.matmul(inputs, input_weights), input_bias))
-
-            with tf.variable_scope('tensor_product'):
-                tensor = get_cp_tensor([self.state_size,
+            input_adjustment = \
+                tf.nn.bias_add(tf.matmul(inputs, input_weights), input_bias)
+            with tf.variable_scope('tensor_product',
+                                   initializer=init.spectral_normalised_init(0.999)):
+                tensor = get_cp_tensor([self.input_size,
                                         self.output_size,
                                         self.state_size],
                                        self.rank,
                                        'weight_tensor',
                                        weightnorm=False,
                                        trainable=True)
-                tensor_prod = bilinear_product_cp(input_adjustment,
+                tensor_prod = bilinear_product_cp(inputs,
                                                   tensor,
                                                   states)
-            result = states + tensor_prod
+            result = states - tf.nn.relu(tensor_prod) + tf.nn.relu(input_adjustment)
 
         return result, result
 
