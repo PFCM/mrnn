@@ -50,7 +50,10 @@ class CPDeltaCell(tf.nn.rnn_cell.RNNCell):
                 tensor = get_cp_tensor([self.state_size,
                                         self.output_size,
                                         self.state_size],
-                                       self.rank)
+                                       self.rank,
+                                       'weight_tensor',
+                                       weightnorm=False,
+                                       trainable=True)
                 tensor_prod = bilinear_product_cp(input_adjustment,
                                                   tensor,
                                                   states)
