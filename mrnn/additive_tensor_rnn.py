@@ -13,13 +13,59 @@ from mrnn.tensor_ops import *
 import mrnn.init as init
 
 
+class CPDeltaCell(tf.nn.rnn_cell.RNNCell):
+    """Upon which all hopes are pinned"""
+
+    def __init__(self, num_units, num_inputs, rank):
+        self._num_units = num_units
+        self._num_inputs = num_inputs
+        self._rank = rank
+
+    @property
+    def rank(self):
+        return self._rank
+
+    @property
+    def state_size(self):
+        return self._num_units
+
+    @property
+    def input_size(self):
+        return self._num_inputs
+
+    @property
+    def output_size(self):
+        return self._num_units
+
+    def __call__(self, inputs, states, scope=None):
+        with tf.variable_scope(scope or type(self).__name__):
+            input_weights = tf.get_variable('input_weights',
+                                            [self.input_size,
+                                             self.state_size])
+            input_bias = tf.get_variable('input_bias', [self.state_size])
+            input_adjustment = tf.nn.relu(
+                tf.nn.bias_add(tf.matmul(inputs, input_weights), input_bias))
+
+            with tf.variable_scope('tensor_product'):
+                tensor = get_cp_tensor([self.state_size,
+                                        self.output_size,
+                                        self.state_size],
+                                       self.rank)
+                tensor_prod = bilinear_product_cp(input_adjustment,
+                                                  tensor,
+                                                  states)
+            result = states + tensor_prod
+
+        return result, result
+
+
 class AddSubCPCell(tf.nn.rnn_cell.RNNCell):
     """Basically difference between two of the below"""
 
     def __init__(self, num_units, num_inputs, rank,
                  input_projections=None,
                  nonlinearity=tf.nn.relu,
-                 tensor_init=init.spectral_normalised_init(0.99)):
+                 tensor_init=init.spectral_normalised_init(0.999)):
         self._num_units = num_units
         self._num_inputs = num_inputs
         self._nonlinearity = nonlinearity
@@ -79,8 +125,8 @@ class AddSubCPCell(tf.nn.rnn_cell.RNNCell):
                                     initializer=tf.constant_initializer(0.0))
             bias2 = tf.get_variable('b2', shape=[self.output_size],
                                     initializer=tf.constant_initializer(0.0))
-            positive = self._nonlinearity(combo_1 + input_weights_1 + bias1)
-            negative = self._nonlinearity(combo_2 + input_weights_2 + bias2)
+            positive = self._nonlinearity(combo_1 + input_proj_1 + bias1)
+            negative = self._nonlinearity(combo_2 + input_proj_2 + bias2)
             result = positive - negative + states
         return result, result
 
