@@ -57,7 +57,12 @@ class CPDeltaCell(tf.nn.rnn_cell.RNNCell):
                 tensor_prod = bilinear_product_cp(inputs,
                                                   tensor,
                                                   states)
-            result = states - tf.nn.relu(tensor_prod) + tf.nn.relu(input_adjustment)
+            state_projection = tf.get_variable(
+                'sproj', [self.state_size, self.state_size],
+                initializer=init.spectral_normalised_init(0.999))
+            result = states - \
+                tf.matmul(state_projection,
+                          tf.nn.relu(tensor_prod + input_adjustment))
             result = result
 
         return result, result
