@@ -58,6 +58,7 @@ class CPDeltaCell(tf.nn.rnn_cell.RNNCell):
                                                   tensor,
                                                   states)
             result = states - tf.nn.relu(tensor_prod) + tf.nn.relu(input_adjustment)
+            result = result
 
         return result, result
 
@@ -129,7 +130,9 @@ class AddSubCPCell(tf.nn.rnn_cell.RNNCell):
             bias2 = tf.get_variable('b2', shape=[self.output_size],
                                     initializer=tf.constant_initializer(0.0))
             positive = self._nonlinearity(combo_1 + input_proj_1 + bias1)
+            positive = tf.nn.l2_normalize(positive, 1)
             negative = self._nonlinearity(combo_2 + input_proj_2 + bias2)
+            negative = tf.nn.l2_normalize(negative, 1)
             result = positive - negative + states
         return result, result
 
