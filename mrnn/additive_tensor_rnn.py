@@ -40,13 +40,13 @@ class CPDeltaCell(tf.nn.rnn_cell.RNNCell):
     def __call__(self, inputs, states, scope=None):
         with tf.variable_scope(scope or type(self).__name__):
             input_weights = tf.get_variable('input_weights',
-                                            [self.input_size,
-                                             self.state_size])
+                                           [self.input_size,
+                                            self.state_size])
             input_bias = tf.get_variable('input_bias', [self.state_size])
             input_adjustment = \
                 tf.nn.bias_add(tf.matmul(inputs, input_weights), input_bias)
             with tf.variable_scope('tensor_product',
-                                   initializer=init.spectral_normalised_init(1.5)):
+                                   initializer=init.spectral_normalised_init(0.999)):
                 tensor = get_cp_tensor([self.input_size,
                                         self.output_size,
                                         self.state_size],
@@ -54,13 +54,24 @@ class CPDeltaCell(tf.nn.rnn_cell.RNNCell):
                                        'weight_tensor',
                                        weightnorm=False,
                                        trainable=True)
-                tensor_prod = bilinear_product_cp(tf.nn.relu(input_adjustment),
+                tensor_prod = bilinear_product_cp(inputs,
                                                   tensor,
                                                   states)
 
-            result = states + tensor_prod
-            result = result
+            candidate = tf.nn.relu(tensor_prod + input_adjustment)
 
+            with tf.variable_scope('tensor_2',
+                                   initializer=init.spectral_normalised_init(0.999)):
+                t2 = get_cp_tensor([self.input_size,
+                                    self.output_size,
+                                    self.state_size],
+                                   self.rank,
+                                   'interp_weights',
+                                   weightnorm=False,
+                                   trainable=True)
+                interp = bilinear_product_cp(inputs, tensor, states)
+                interp = tf.nn.sigmoid(interp)
+            result = interp * states + candidate
         return result, result
 
 
