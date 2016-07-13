@@ -46,7 +46,7 @@ class CPDeltaCell(tf.nn.rnn_cell.RNNCell):
             input_adjustment = \
                 tf.nn.bias_add(tf.matmul(inputs, input_weights), input_bias)
             with tf.variable_scope('tensor_product',
-                                   initializer=init.spectral_normalised_init(0.999)):
+                                   initializer=init.spectral_normalised_init(1.5)):
                 tensor = get_cp_tensor([self.input_size,
                                         self.output_size,
                                         self.state_size],
@@ -54,11 +54,11 @@ class CPDeltaCell(tf.nn.rnn_cell.RNNCell):
                                        'weight_tensor',
                                        weightnorm=False,
                                        trainable=True)
-                tensor_prod = bilinear_product_cp(inputs,
+                tensor_prod = bilinear_product_cp(tf.nn.relu(input_adjustment),
                                                   tensor,
                                                   states)
 
-            result = tf.nn.relu(states + tensor_prod + input_adjustment)
+            result = states + tensor_prod
             result = result
 
         return result, result
