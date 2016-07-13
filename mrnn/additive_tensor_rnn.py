@@ -46,7 +46,7 @@ class CPDeltaCell(tf.nn.rnn_cell.RNNCell):
             input_adjustment = \
                 tf.nn.bias_add(tf.matmul(inputs, input_weights), input_bias)
             with tf.variable_scope('tensor_product',
-                                   initializer=init.spectral_normalised_init(0.999)):
+                                   initializer=tf.random_normal_initializer(stddev=0.001)):
                 tensor = get_cp_tensor([self.input_size,
                                         self.output_size,
                                         self.state_size],
@@ -61,7 +61,7 @@ class CPDeltaCell(tf.nn.rnn_cell.RNNCell):
             candidate = tf.nn.relu(tensor_prod + input_adjustment)
 
             with tf.variable_scope('tensor_2',
-                                   initializer=init.spectral_normalised_init(0.999)):
+                                   initializer=tf.random_normal_initializer(stddev=0.001)):
                 t2 = get_cp_tensor([self.input_size,
                                     self.output_size,
                                     self.state_size],
@@ -70,8 +70,10 @@ class CPDeltaCell(tf.nn.rnn_cell.RNNCell):
                                    weightnorm=False,
                                    trainable=True)
                 interp = bilinear_product_cp(inputs, tensor, states)
-                interp = tf.nn.sigmoid(interp)
-            result = interp * states + candidate
+                interp_bias = tf.get_variable('i_bias', [self.state_size],
+                                              initializer=tf.constant_initializer(1.0))
+                interp = tf.nn.relu(interp)
+            result = interp + candidate
         return result, result
 
 
@@ -183,7 +185,7 @@ class AdditiveCPCell(tf.nn.rnn_cell.RNNCell):
             # sub scope for the tensor init
             # should inherit reuse from outer scope
             with tf.variable_scope('tensor',
-                                   initializer=init.spectral_normalised_init(1.1)):
+                                   initializer=init.spectral_normalised_init(1.5)):
                 tensor = get_cp_tensor([self.input_size,
                                         self.output_size,
                                         self.state_size],
