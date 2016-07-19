@@ -77,7 +77,7 @@ def inference(input_var, shape, vocab_size, num_steps,
             post softmax projection (but before actual softmax)
             and state is the final state of the rnn.
     """
-    # first thing we need is some kind of embedding
+    # first thing we need is some kind of embedding maybe
     with tf.device('/cpu:0'):
         embedding = tf.get_variable('embedding', [vocab_size, shape[0]])
         inputs = tf.nn.embedding_lookup(embedding, input_var)
@@ -268,7 +268,7 @@ def gen_sample(vocab, probs, input_var, in_state_var, out_state_var,
             [probs, out_state_var],
             {input_var: np.array(val).reshape((1, 1)),
              in_state_var: state})
-        
+
     # then go ahead and generate new things
     input_data = seed_list[-1]
     for _ in range(length):
