@@ -47,10 +47,13 @@ def get_weightnormed_matrix(shape, axis=1, name='weightnorm',
                                      trainable=trainable,
                                      initializer=V_init,
                                      dtype=dtype)
-        gains = tf.get_variable(name+'_g', [shape[0], 1],
-                                trainable=train_gains,
-                                initializer=tf.constant_initializer(1.0),
-                                dtype=dtype)
+        if axis:
+            gains = tf.get_variable(name+'_g', [shape[0], 1],
+                                    trainable=train_gains,
+                                    initializer=tf.constant_initializer(1.0),
+                                    dtype=dtype)
+        else:
+            gains = 1.0
         inv_norms = tf.rsqrt(
             tf.reduce_sum(
                 tf.square(unnormed_w),

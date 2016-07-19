@@ -222,7 +222,8 @@ def get_cp_tensor(shape, maxrank, name, weightnorm=False, dtype=tf.float32,
                     hops.get_weightnormed_matrix(
                         [maxrank, dim],
                         name='cp_decomp_{}'.format(i),
-                        trainable=trainable))
+                        trainable=trainable,
+                        axis=None))
             else:
                 matrices.append(
                     tf.get_variable('cp_decomp_{}'.format(i),

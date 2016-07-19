@@ -39,41 +39,58 @@ class CPDeltaCell(tf.nn.rnn_cell.RNNCell):
 
     def __call__(self, inputs, states, scope=None):
         with tf.variable_scope(scope or type(self).__name__):
-            input_weights = tf.get_variable('input_weights',
+            input_weights_1 = tf.get_variable('input_weights_1',
                                            [self.input_size,
                                             self.state_size])
-            input_bias = tf.get_variable('input_bias', [self.state_size])
-            input_adjustment = \
-                tf.nn.bias_add(tf.matmul(inputs, input_weights), input_bias)
-            with tf.variable_scope('tensor_product',
-                                   initializer=tf.random_normal_initializer(stddev=0.001)):
-                tensor = get_cp_tensor([self.input_size,
-                                        self.output_size,
-                                        self.state_size],
-                                       self.rank,
-                                       'weight_tensor',
-                                       weightnorm=False,
-                                       trainable=True)
-                tensor_prod = bilinear_product_cp(inputs,
-                                                  tensor,
-                                                  states)
+            input_weights_2 = tf.get_variable('input_weights_2',
+                                              [self.input_size,
+                                               self.state_size])
+            # possible needs weightnorm
+            hidden_weights_1 = tf.get_variable('hidden_weights_1',
+                                               [self.state_size,
+                                                self.state_size])
+            hidden_weights_2 = tf.get_variable('hidden_weights_2',
+                                               [self.state_size,
+                                                self.state_size])
+            input_bias_1 = tf.get_variable('input_bias_1', [self.state_size],
+                                           initializer=tf.constant_initializer(0.0))
+            input_bias_2 = tf.get_variable('input_bias_2', [self.state_size],
+                                           initializer=tf.constant_initializer(0.0))
+            positive_bias = tf.nn.bias_add(
+                tf.matmul(inputs, input_weights_1) + tf.matmul(states, hidden_weights_2),
+                input_bias_1)
+            negative_bias = tf.nn.bias_add(
+                tf.matmul(inputs, input_weights_2) + tf.matmul(states, hidden_weights_2),
+                input_bias_2)
+            with tf.variable_scope('plus_tensor',
+                                   initializer=tf.random_uniform_initializer(minval=-0.002, maxval=0.002)):
+                plus_tensor = get_cp_tensor([self.input_size,
+                                             self.output_size,
+                                             self.state_size],
+                                            self.rank,
+                                            'pos_tensor',
+                                            weightnorm=False,
+                                            trainable=True)
+                pos_tensor_prod = bilinear_product_cp(inputs,
+                                                      plus_tensor,
+                                                      states)
 
-            candidate = tf.nn.relu(tensor_prod + input_adjustment)
+            positive = tf.nn.relu(pos_tensor_prod + positive_bias)
 
-            with tf.variable_scope('tensor_2',
-                                   initializer=tf.random_normal_initializer(stddev=0.001)):
-                t2 = get_cp_tensor([self.input_size,
-                                    self.output_size,
-                                    self.state_size],
-                                   self.rank,
-                                   'interp_weights',
-                                   weightnorm=False,
-                                   trainable=True)
-                interp = bilinear_product_cp(inputs, tensor, states)
-                interp_bias = tf.get_variable('i_bias', [self.state_size],
-                                              initializer=tf.constant_initializer(1.0))
-                interp = tf.nn.relu(interp)
-            result = interp + candidate
+            with tf.variable_scope('minus_tensor',
+                                   initializer=tf.random_uniform_initializer(minval=-0.002, maxval=0.002)):
+                minus_tensor = get_cp_tensor([self.input_size,
+                                              self.output_size,
+                                              self.state_size],
+                                             self.rank,
+                                             'neg_tensor',
+                                             weightnorm=False,
+                                             trainable=True)
+                neg_tensor_prod = bilinear_product_cp(inputs,
+                                                      minus_tensor,
+                                                      states)
+            negative = tf.nn.relu(neg_tensor_prod + negative_bias)
+            result = positive - negative + states
         return result, result
 
 
@@ -118,7 +135,7 @@ class AddSubCPCell(tf.nn.rnn_cell.RNNCell):
                                           self.state_size],
                                          self.rank,
                                          'W1',
-                                         weightnorm=False,
+                                         weightnorm=True,
                                          trainable=True)
             with tf.variable_scope('tensor_2',
                                    initializer=self._tensor_init):
@@ -127,7 +144,7 @@ class AddSubCPCell(tf.nn.rnn_cell.RNNCell):
                                           self.state_size],
                                          self.rank,
                                          'W2',
-                                         weightnorm=False,
+                                         weightnorm=True,
                                          trainable=True)
             combo_1 = bilinear_product_cp(inputs, tensor_1, states)
             combo_2 = bilinear_product_cp(inputs, tensor_2, states)
@@ -144,9 +161,9 @@ class AddSubCPCell(tf.nn.rnn_cell.RNNCell):
             bias2 = tf.get_variable('b2', shape=[self.output_size],
                                     initializer=tf.constant_initializer(0.0))
             positive = self._nonlinearity(combo_1 + input_proj_1 + bias1)
-            positive = tf.nn.l2_normalize(positive, 1)
+            # positive = tf.nn.l2_normalize(positive, 1)
             negative = self._nonlinearity(combo_2 + input_proj_2 + bias2)
-            negative = tf.nn.l2_normalize(negative, 1)
+            # negative = tf.nn.l2_normalize(negative, 1)
             result = positive - negative + states
         return result, result
 
