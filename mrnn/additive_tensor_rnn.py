@@ -109,7 +109,7 @@ class CPDeltaCell(tf.nn.rnn_cell.RNNCell):
                 pos_tensor_prod = _tensor_logits(inputs, states, self.rank,
                                                  weightnorm=self.weightnorm,
                                                  pad=True,
-                                                 separate_pad=True,
+                                                 separate_pad=False,
                                                  name='positive')
 
                 positive = tf.nn.relu(pos_tensor_prod)
@@ -119,7 +119,7 @@ class CPDeltaCell(tf.nn.rnn_cell.RNNCell):
                 neg_tensor_prod = _tensor_logits(inputs, states, self.rank,
                                                  weightnorm=self.weightnorm,
                                                  pad=True,
-                                                 separate_pad=True,
+                                                 separate_pad=False,
                                                  name='negative')
                 negative = tf.nn.relu(neg_tensor_prod)
 
