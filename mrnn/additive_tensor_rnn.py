@@ -80,10 +80,11 @@ def _tensor_logits(inputs, states, rank, weightnorm=None, pad=True,
 class CPDeltaCell(tf.nn.rnn_cell.RNNCell):
     """Upon which all hopes are pinned"""
 
-    def __init__(self, num_units, num_inputs, rank):
+    def __init__(self, num_units, num_inputs, rank, weightnorm=None):
         self._num_units = num_units
         self._num_inputs = num_inputs
         self._rank = rank
+        self.weightnorm = weightnorm
 
     @property
     def rank(self):
@@ -106,7 +107,7 @@ class CPDeltaCell(tf.nn.rnn_cell.RNNCell):
             with tf.variable_scope('plus_tensor',
                                    initializer=init.spectral_normalised_init(1.1)):
                 pos_tensor_prod = _tensor_logits(inputs, states, self.rank,
-                                                 weightnorm='classic',
+                                                 weightnorm=self.weightnorm,
                                                  pad=True,
                                                  separate_pad=True,
                                                  name='positive')
@@ -116,7 +117,7 @@ class CPDeltaCell(tf.nn.rnn_cell.RNNCell):
             with tf.variable_scope('minus_tensor',
                                    initializer=init.spectral_normalised_init(1.1)):
                 neg_tensor_prod = _tensor_logits(inputs, states, self.rank,
-                                                 weightnorm='classic',
+                                                 weightnorm=self.weightnorm,
                                                  pad=True,
                                                  separate_pad=True,
                                                  name='negative')
