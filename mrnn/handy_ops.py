@@ -19,9 +19,9 @@ def possibly_weightnormed_var(shape, normtype, name, trainable=True):
         return get_weightnormed_matrix(shape, name=name, V_init=None,
                                        trainable=trainable)
     elif normtype == 'partial':
-        # squared frobenius, no gains
+        # frobenius, no gains
         return get_weightnormed_matrix(shape, axis=None, name=name,
-                                       V_init=None, squared=True,
+                                       V_init=None, squared=False,
                                        trainable=trainable)
     elif not normtype:
         # unconstrained

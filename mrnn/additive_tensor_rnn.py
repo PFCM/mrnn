@@ -104,7 +104,7 @@ class CPDeltaCell(tf.nn.rnn_cell.RNNCell):
     def __call__(self, inputs, states, scope=None):
         with tf.variable_scope(scope or type(self).__name__):
             with tf.variable_scope('plus_tensor',
-                                   initializer=tf.random_uniform_initializer(minval=-0.002, maxval=0.002)):
+                                   initializer=tf.random_uniform_initializer(minval=-0.04, maxval=0.04)):
                 pos_tensor_prod = _tensor_logits(inputs, states, self.rank,
                                                  weightnorm='partial',
                                                  pad=True,
@@ -114,7 +114,7 @@ class CPDeltaCell(tf.nn.rnn_cell.RNNCell):
                 positive = tf.nn.relu(pos_tensor_prod)
 
             with tf.variable_scope('minus_tensor',
-                                   initializer=tf.random_uniform_initializer(minval=-0.002, maxval=0.002)):
+                                   initializer=tf.random_uniform_initializer(minval=-0.04, maxval=0.04)):
                 neg_tensor_prod = _tensor_logits(inputs, states, self.rank,
                                                  weightnorm='partial',
                                                  pad=True,
