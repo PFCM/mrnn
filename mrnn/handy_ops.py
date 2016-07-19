@@ -23,6 +23,10 @@ def possibly_weightnormed_var(shape, normtype, name, trainable=True):
         return get_weightnormed_matrix(shape, axis=None, name=name,
                                        V_init=None, squared=False,
                                        trainable=trainable)
+    elif normtype == 'row':
+        # do it by row, but still no gains
+        return get_weightnormed_matrix(shape, axis=0, name=name,
+                                       V_init=None, train_gains=False)
     elif not normtype:
         # unconstrained
         return tf.get_variable(name, dtype=tf.float32, shape=shape,

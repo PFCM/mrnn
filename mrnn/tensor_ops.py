@@ -214,6 +214,8 @@ def get_cp_tensor(shape, maxrank, name, weightnorm=False, dtype=tf.float32,
       tuple of `len(shape)` matrices, with each one of shape `[maxrank x d]`
         where `d` is the corresponding entry in `shape`
     """
+    if weightnorm == 'classic':
+        weightnorm = 'row'
     with tf.name_scope(name):
         matrices = []
         for i, dim in enumerate(shape):
@@ -231,6 +233,10 @@ def get_cp_tensor(shape, maxrank, name, weightnorm=False, dtype=tf.float32,
             #                         dtype=dtype, trainable=trainable))
             matrices.append(hops.possibly_weightnormed_var(
                 [maxrank, dim], weightnorm, name+'_cp_decomp_{}'.format(i)))
+    if weightnorm == 'row':
+        matrices.append(tf.get_variable('cp_decomp_gains', [maxrank, 1], dtype=dtype,
+                                        trainable=trainable,
+                                        initializer=tf.constant_initializer(0.1)))
     return tuple(matrices)
 
 
@@ -263,7 +269,7 @@ def bilinear_product_cp(vec_a, tensor, vec_b, batch_major=True,
       ValueError: if the various shapes etc don't line up.
     """
     # quick sanity checks
-    if len(tensor) != 3:
+    if len(tensor) != 3 and len(tensor) != 4:
         raise ValueError('Expecting three way decomposed tensor')
 
     with tf.name_scope(name):
@@ -278,6 +284,9 @@ def bilinear_product_cp(vec_a, tensor, vec_b, batch_major=True,
         prod_c = tf.matmul(tensor[2], vec_b, transpose_b=batch_major)
         # now do these two elementwise
         prod_b = tf.mul(prod_a, prod_c)
+        # if there are scales in the tensor, here is when to apply them
+        if len(tensor) == 4:
+            prod_b = tf.mul(tensor[3], prod_b)
         # and multiply the result by the remaining matrix in tensor
         result = tf.matmul(tensor[1], prod_b, transpose_a=True)
         if batch_major:

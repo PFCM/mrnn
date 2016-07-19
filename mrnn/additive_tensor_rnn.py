@@ -62,10 +62,10 @@ def _tensor_logits(inputs, states, rank, weightnorm=None, pad=True,
     if pad and separate_pad:
         # then we have to do these guys too
         input_weights = possibly_weightnormed_var([input_size, state_size],
-                                                  weightnorm,
+                                                  None,
                                                   name + 'input_weights')
         state_weights = possibly_weightnormed_var([state_size, state_size],
-                                                  weightnorm,
+                                                  'classic',
                                                   name + 'state_weights')
         bias = tf.get_variable(name+'bias', dtype=tf.float32,
                                shape=[state_size],
@@ -104,9 +104,9 @@ class CPDeltaCell(tf.nn.rnn_cell.RNNCell):
     def __call__(self, inputs, states, scope=None):
         with tf.variable_scope(scope or type(self).__name__):
             with tf.variable_scope('plus_tensor',
-                                   initializer=tf.random_uniform_initializer(minval=-0.04, maxval=0.04)):
+                                   initializer=init.spectral_normalised_init(1.1)):
                 pos_tensor_prod = _tensor_logits(inputs, states, self.rank,
-                                                 weightnorm='partial',
+                                                 weightnorm='classic',
                                                  pad=True,
                                                  separate_pad=True,
                                                  name='positive')
@@ -114,9 +114,9 @@ class CPDeltaCell(tf.nn.rnn_cell.RNNCell):
                 positive = tf.nn.relu(pos_tensor_prod)
 
             with tf.variable_scope('minus_tensor',
-                                   initializer=tf.random_uniform_initializer(minval=-0.04, maxval=0.04)):
+                                   initializer=init.spectral_normalised_init(1.1)):
                 neg_tensor_prod = _tensor_logits(inputs, states, self.rank,
-                                                 weightnorm='partial',
+                                                 weightnorm='classic',
                                                  pad=True,
                                                  separate_pad=True,
                                                  name='negative')
