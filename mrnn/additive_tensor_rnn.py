@@ -13,6 +13,70 @@ from mrnn.tensor_ops import *
 import mrnn.init as init
 
 
+def _tensor_logits(inputs, states, rank, weightnorm=None, pad=True,
+                   separate_pad=True, name='t_prod'):
+    """Gets a tensor product of inputs and states, with a few options.
+
+    Args:
+        inputs: the inputs to the layer (or just the first input).
+        states: the previous hidden states (or just the second input).
+        rank: the rank of the decomposed tensor to use.
+        weightnorm: Whether or not (or indeed how) to normalise the weights.
+            Possible values are `None` for a totally unconstrained tensor,
+            'partial' for doing a minimal normalisation (with no extra
+            parameters)  which just returns each of the matrices divided by
+            its squared frobenius norm or 'classic' which does all of the
+            rows of all of the matrices and adds the necessary learnable
+            gain coefficients.
+        pad: whether or not to add biases to the tensor product.
+        separate_pad: whether or not to incorporate the bias matrices into
+            the decomposition. If true, we will have more parameters but we
+            will definitely be capable of exactly representing a classic RNN.
+
+    Returns:
+        tensor, the result.
+    """
+    batch_size, state_size = states.get_shape().as_list()
+    input_size = inputs.get_shape()[1].value
+    if pad and not separate_pad:
+        # just add a column of ones to inputs and states
+        inputs = tf.concat(1, [tf.ones([batch_size, 1]), inputs])
+        states = tf.concat(1, [tf.ones([batch_size, 1]), states])
+        # the tensor now has to be a little bit of an odd shape
+        tensor = get_cp_tensor([state_size+1,
+                                state_size,
+                                input_size+1],
+                               rank,
+                               name,
+                               weightnorm=weightnorm)
+    else:
+        # the tensor is normal shape
+        tensor = get_cp_tensor([state_size,
+                                state_size,
+                                input_size],
+                               rank,
+                               name,
+                               weightnorm=weightnorm)
+    tensor_prod = bilinear_product_cp(states, tensor, inputs)
+
+    if pad and separate_pad:
+        # then we have to do these guys too
+        input_weights = possibly_weightnormed_var([input_size, state_size],
+                                                  weightnorm,
+                                                  name + 'input_weights')
+        state_weights = possibly_weightnormed_var([state_size, state_size],
+                                                  weightnorm,
+                                                  name + 'state_weights')
+        bias = tf.get_variable(name+'bias', dtype=tf.float32,
+                               shape=[state_size],
+                               initializer=tf.constant_initializer(0.0))
+        tensor_prod += tf.nn.bias_add(
+            tf.matmul(inputs, input_weights) +
+            tf.matmul(states, state_weights),
+            bias)
+    return tensor_prod
+
+
 class CPDeltaCell(tf.nn.rnn_cell.RNNCell):
     """Upon which all hopes are pinned"""
 
@@ -39,57 +103,25 @@ class CPDeltaCell(tf.nn.rnn_cell.RNNCell):
 
     def __call__(self, inputs, states, scope=None):
         with tf.variable_scope(scope or type(self).__name__):
-            input_weights_1 = tf.get_variable('input_weights_1',
-                                           [self.input_size,
-                                            self.state_size])
-            input_weights_2 = tf.get_variable('input_weights_2',
-                                              [self.input_size,
-                                               self.state_size])
-            # possible needs weightnorm
-            hidden_weights_1 = tf.get_variable('hidden_weights_1',
-                                               [self.state_size,
-                                                self.state_size])
-            hidden_weights_2 = tf.get_variable('hidden_weights_2',
-                                               [self.state_size,
-                                                self.state_size])
-            input_bias_1 = tf.get_variable('input_bias_1', [self.state_size],
-                                           initializer=tf.constant_initializer(0.0))
-            input_bias_2 = tf.get_variable('input_bias_2', [self.state_size],
-                                           initializer=tf.constant_initializer(0.0))
-            positive_bias = tf.nn.bias_add(
-                tf.matmul(inputs, input_weights_1) + tf.matmul(states, hidden_weights_2),
-                input_bias_1)
-            negative_bias = tf.nn.bias_add(
-                tf.matmul(inputs, input_weights_2) + tf.matmul(states, hidden_weights_2),
-                input_bias_2)
             with tf.variable_scope('plus_tensor',
                                    initializer=tf.random_uniform_initializer(minval=-0.002, maxval=0.002)):
-                plus_tensor = get_cp_tensor([self.input_size,
-                                             self.output_size,
-                                             self.state_size],
-                                            self.rank,
-                                            'pos_tensor',
-                                            weightnorm=False,
-                                            trainable=True)
-                pos_tensor_prod = bilinear_product_cp(inputs,
-                                                      plus_tensor,
-                                                      states)
+                pos_tensor_prod = _tensor_logits(inputs, states, self.rank,
+                                                 weightnorm='partial',
+                                                 pad=True,
+                                                 separate_pad=True,
+                                                 name='positive')
 
-            positive = tf.nn.relu(pos_tensor_prod + positive_bias)
+                positive = tf.nn.relu(pos_tensor_prod)
 
             with tf.variable_scope('minus_tensor',
                                    initializer=tf.random_uniform_initializer(minval=-0.002, maxval=0.002)):
-                minus_tensor = get_cp_tensor([self.input_size,
-                                              self.output_size,
-                                              self.state_size],
-                                             self.rank,
-                                             'neg_tensor',
-                                             weightnorm=False,
-                                             trainable=True)
-                neg_tensor_prod = bilinear_product_cp(inputs,
-                                                      minus_tensor,
-                                                      states)
-            negative = tf.nn.relu(neg_tensor_prod + negative_bias)
+                neg_tensor_prod = _tensor_logits(inputs, states, self.rank,
+                                                 weightnorm='partial',
+                                                 pad=True,
+                                                 separate_pad=True,
+                                                 name='negative')
+                negative = tf.nn.relu(neg_tensor_prod)
+
             result = positive - negative + states
         return result, result
 

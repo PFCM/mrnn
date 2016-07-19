@@ -217,18 +217,20 @@ def get_cp_tensor(shape, maxrank, name, weightnorm=False, dtype=tf.float32,
     with tf.name_scope(name):
         matrices = []
         for i, dim in enumerate(shape):
-            if weightnorm:
-                matrices.append(
-                    hops.get_weightnormed_matrix(
-                        [maxrank, dim],
-                        name='cp_decomp_{}'.format(i),
-                        trainable=trainable,
-                        axis=None))
-            else:
-                matrices.append(
-                    tf.get_variable('cp_decomp_{}'.format(i),
-                                    [maxrank, dim],
-                                    dtype=dtype, trainable=trainable))
+            # if weightnorm:
+            #     matrices.append(
+            #         hops.get_weightnormed_matrix(
+            #             [maxrank, dim],
+            #             name='cp_decomp_{}'.format(i),
+            #             trainable=trainable,
+            #             axis=None))
+            # else:
+            #     matrices.append(
+            #         tf.get_variable('cp_decomp_{}'.format(i),
+            #                         [maxrank, dim],
+            #                         dtype=dtype, trainable=trainable))
+            matrices.append(hops.possibly_weightnormed_var(
+                [maxrank, dim], weightnorm, name+'_cp_decomp_{}'.format(i)))
     return tuple(matrices)
 
 
@@ -358,4 +360,3 @@ def bilinear_product_tt_3(input_a, tensor, input_b, name='bilinear_tt3',
         # matmul
         result = tf.matmul(tensor[1], outer, transpose_b=True)
         return tf.transpose(result)
-
