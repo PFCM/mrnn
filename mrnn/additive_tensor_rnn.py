@@ -77,6 +77,76 @@ def _tensor_logits(inputs, states, rank, weightnorm=None, pad=True,
     return tensor_prod
 
 
+def _affine(data, new_size, weightnorm=None, name='affine'):
+    """performs an affine transormation on the data using trainable, possibly weightnormed
+    variables"""
+    input_size = data.get_shape()[1].value
+    weights = possibly_weightnormed_var([input_size, new_size],
+                                        weightnorm,
+                                        name+'_weights')
+    bias = tf.get_variable(name+'_bias', dtype=tf.float32, shape=[new_size],
+                           initializer=tf.constant_initializer(0.0))
+    return tf.nn.bias_add(tf.matmul(data, weights), bias)
+
+
+class CPResCell(tf.nn.rnn_cell.RNNCell):
+    """try something JIC"""
+
+    def __init__(self, num_units, num_inputs, rank, weightnorm=None):
+        self._num_units = num_units
+        self._num_inputs = num_inputs
+        self._rank = rank
+        self._weightnorm = weightnorm
+
+
+    @property
+    def rank(self):
+        return self._rank
+        
+    @property
+    def state_size(self):
+        return self._num_units
+
+    @property
+    def input_size(self):
+        return self._num_inputs
+
+    @property
+    def output_size(self):
+        return self._num_units
+
+    def __call__(self, inputs, states, scope=None):
+        with tf.variable_scope(scope or type(self).__name__):
+            # project the inputs and the states into the shared space
+            # maybe weightnorm these guys
+            proj_in = _affine(inputs, self.rank, name='input_projection',
+                              weightnorm='classic')
+            proj_st = _affine(states, self.rank, name='output_projection',
+                              weightnorm='classic')
+            clipped = tf.nn.relu(proj_in * proj_st)
+            result = _affine(clipped, self.state_size, name='addition_projection',
+                             weightnorm='classic')
+            # with tf.variable_scope('pre_act', initializer=init.spectral_normalised_init(2.0)):
+            #    pre_activations = _tensor_logits(inputs, states, self.rank,
+            #                                     weightnorm='classic',
+            #                                     pad=True,
+            #                                     separate_pad=False,
+            #                                     name='pre_act')
+            #    cut = tf.nn.relu(pre_activations)
+            # with tf.variable_scope('post_act', initializer=init.spectral_normalised_init(2.0)):
+            # post_activations = _tensor_logits(cut, states, self.rank,
+            #                                  weightnorm=self._weightnorm,
+            #                                  pad=True,
+            #                                  separate_pad=False,
+            #                                  name='post_act')
+            #    post_activations = _affine(cut, self.state_size, name='cut_proj',
+            #                               weightnorm='classic')
+            # result = post_activations  # relu?
+            result += states
+        return result, result
+
+        
+
 class CPDeltaCell(tf.nn.rnn_cell.RNNCell):
     """Upon which all hopes are pinned"""
 
