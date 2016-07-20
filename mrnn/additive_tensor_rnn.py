@@ -120,28 +120,28 @@ class CPResCell(tf.nn.rnn_cell.RNNCell):
             # project the inputs and the states into the shared space
             # maybe weightnorm these guys
             proj_in = _affine(inputs, self.rank, name='input_projection',
-                              weightnorm='classic')
-            proj_st = _affine(states, self.rank, name='output_projection',
-                              weightnorm='classic')
-            clipped = tf.nn.relu(proj_in * proj_st)
-            result = _affine(clipped, self.state_size, name='addition_projection',
-                             weightnorm='classic')
-            # with tf.variable_scope('pre_act', initializer=init.spectral_normalised_init(2.0)):
-            #    pre_activations = _tensor_logits(inputs, states, self.rank,
-            #                                     weightnorm='classic',
-            #                                     pad=True,
-            #                                     separate_pad=False,
-            #                                     name='pre_act')
-            #    cut = tf.nn.relu(pre_activations)
+                              weightnorm=self._weightnorm)
+            # proj_st = _affine(states, self.rank, name='output_projection',
+            #                   weightnorm='classic')
+            # clipped = tf.nn.relu(proj_in * proj_st)
+            # result = _affine(clipped, self.state_size, name='addition_projection',
+            #                 weightnorm='classic')
+            with tf.variable_scope('pre_act', initializer=init.spectral_normalised_init(2.0)):
+                pre_activations = _tensor_logits(inputs, states, self.rank,
+                                                 weightnorm=self._weightnorm,
+                                                 pad=False,
+                                                 separate_pad=False,
+                                                 name='pre_act')
+               cut = tf.nn.relu(pre_activations + proj_in)
             # with tf.variable_scope('post_act', initializer=init.spectral_normalised_init(2.0)):
             # post_activations = _tensor_logits(cut, states, self.rank,
             #                                  weightnorm=self._weightnorm,
             #                                  pad=True,
             #                                  separate_pad=False,
             #                                  name='post_act')
-            #    post_activations = _affine(cut, self.state_size, name='cut_proj',
-            #                               weightnorm='classic')
-            # result = post_activations  # relu?
+            post_activations = _affine(cut, self.state_size, name='cut_proj',
+                                       weightnorm=self._weightnorm)
+            result = post_activations
             result += states
         return result, result
 
