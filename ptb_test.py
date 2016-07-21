@@ -24,7 +24,7 @@ flags.DEFINE_integer('layers', 2, 'how many hidden layers')
 flags.DEFINE_integer('rank', 50, 'rank of the tensor decomposition, if using')
 
 # training parameters -- defaults are as per the dropout LSTM paper
-flags.DEFINE_float('learning_rate', '0.01', 'base learning rate for ADAM')
+flags.DEFINE_float('learning_rate', 0.01, 'base learning rate for ADAM')
 flags.DEFINE_integer('batch_size', 20, 'minibatch size')
 flags.DEFINE_integer('sequence_length', 35, 'how far we unroll BPTT')
 flags.DEFINE_float('grad_clip', 10.0, 'where to clip the gradients')
@@ -33,6 +33,8 @@ flags.DEFINE_float('grad_clip', 10.0, 'where to clip the gradients')
 #                    'by each epoch after start_decay')
 flags.DEFINE_integer('num_epochs', 15, 'how long to train for')
 flags.DEFINE_float('dropout', 1.0, 'how much dropout (if at all)')
+flags.DEFINE_integer('reset_steps', 0, 'how often to reset the state during training')
+
 
 # housekeeping
 flags.DEFINE_string('results_dir', None, 'where to store the results')
@@ -43,9 +45,11 @@ FLAGS = flags.FLAGS
 
 def fill_batch(input_vars, target_vars, data):
     """makes a feed dict"""
-    return {var: target
-            for var, target in pairs
-            for pairs in zip((input_vars, target_vars), data)}
+    feed = {}
+    for vars, np_data in zip((input_vars, target_vars), data):
+        for var, value in zip(vars, np_data.T):
+            feed[var] = value
+    return feed
 
 
 def run_epoch(sess, data_iter, initial_state, final_state,
@@ -55,11 +59,12 @@ def run_epoch(sess, data_iter, initial_state, final_state,
     costs = 0
     steps = 0
     gnorm = 0
+    state = initial_state.eval(session=sess)
     for batch in data_iter:
+        feed_dict = fill_batch(input_vars, target_vars, batch)
         if reset_after > 0 and steps % reset_after == 0:
             state = initial_state.eval(session=sess)
-        feed_dict = fill_batch(input_vars, target_vars, batch)
-        feed_dict[initial_state: state]
+        feed_dict[initial_state] = state
         if grad_norm is None:
             batch_loss, state, _ = sess.run(
                 [cost, final_state, train_op],
@@ -67,7 +72,8 @@ def run_epoch(sess, data_iter, initial_state, final_state,
 
             costs += batch_loss
             steps += 1
-            print('\r...({}) - xent: {}'.format(steps, costs/steps), end='')
+            if steps % 10 == 0:
+                print('\r...({}) - xent: {}'.format(steps, costs/steps), end='')
         else:
             batch_loss, state, _, batch_gnorm = sess.run(
                 [cost, final_state, train_op, grad_norm],
@@ -75,9 +81,12 @@ def run_epoch(sess, data_iter, initial_state, final_state,
             gnorm += batch_gnorm
             costs += batch_loss
             steps += 1
-            print('\r...({}) - xent: {} (g norm {})'.format(
-                steps, costs/steps, gnorm/steps), end='')
-    print()
+            if steps % 10 == 0:
+                print(
+                    '\r...({}) - xent: {} (g norm {})'.format(
+                        steps, costs/steps, gnorm/steps),
+                    end='', flush=True)
+    print('..epoch over')
     if grad_norm is None:
         return costs/steps
     return costs/steps, gnorm/steps
@@ -116,7 +125,7 @@ def get_cell(input_size, hidden_size):
         return mrnn.SimpleCPCell(hidden_size, input_size, FLAGS.rank)
     elif FLAGS.cell == 'lstm':
         return tf.nn.rnn_cell.BasicLSTMCell(hidden_size, input_size=input_size,
-                                            state_is_tuple=True)
+                                            state_is_tuple=False)
     elif FLAGS.cell == 'vanilla':
         return mrnn.VRNNCell(hidden_size, input_size=input_size)
     elif FLAGS.cell == 'vanilla-weightnorm':
@@ -191,13 +200,17 @@ def loss(logits, targets):
     return tf.reduce_mean(cost)
 
 
-def get_train_op(cost, learning_rate, max_grad_norm=1000.0):
+def get_train_op(cost, learning_rate, max_grad_norm=1000.0, global_step=None):
     """gets a training op (ADAM)"""
     opt = tf.train.AdamOptimizer(learning_rate)
     grads_and_vars = opt.compute_gradients(cost)
     grads, norm = tf.clip_by_global_norm([grad for grad, var in grads_and_vars],
                                          max_grad_norm)
-    return opt.apply_gradients(zip(grads, tvars)), norm
+    t_op = opt.apply_gradients(
+        [(grad, var) for grad, (_, var) 
+         in zip(grads, grads_and_vars)],
+        global_step=global_step)
+    return t_op, norm
 
 
 def main(_):
@@ -230,25 +243,26 @@ def main(_):
         lr_var = tf.Variable(FLAGS.learning_rate,
                              name='learning_rate',
                              trainable=False)
-        train_op, grad_norm = get_train_op(av_cost, lr_var)
+        train_op, grad_norm = get_train_op(av_cost, lr_var, 
+                                           global_step=global_step)
 
     lr = FLAGS.learning_rate
 
     saver = tf.train.Saver(tf.trainable_variables(),
                            max_to_keep=3)
-    model_name = os.path.join(FLAGS.result_path,
-                              'models',
+    model_dir = os.path.join(FLAGS.results_dir,
+                             'models')
+    model_name = os.path.join(model_dir,
                               FLAGS.cell)
     model_name += '({})'.format(
         '-'.join([str(FLAGS.width)] * FLAGS.layers))
-    model_name += '-{}'  # for the step
 
     tv_filename = os.path.join(FLAGS.results_dir,
                                'training.txt')
     test_filename = os.path.join(FLAGS.results_dir,
                                  'test.txt')
-    if not os.path.exists(FLAGS.results_dir):
-        os.makedirs(FLAGS.results_dir, existok=True)
+    os.makedirs(FLAGS.results_dir, exist_ok=True)
+    os.makedirs(model_dir, exist_ok=True)
 
     sess = tf.Session()
     with sess.as_default():
@@ -258,20 +272,23 @@ def main(_):
 
         for epoch in xrange(FLAGS.num_epochs):
             print('~~Epoch: {}'.format(epoch+1))
-            sess.run(dropout.assign(FLAGS.dropout))
+            if dropout != 1.0:
+                sess.run(dropout.assign(FLAGS.dropout))
             epoch_loss, avgnorm = run_epoch(
                 sess, ptb.batch_iterator(train,
                                          FLAGS.batch_size,
-                                         FLAGS.num_steps),
+                                         FLAGS.sequence_length),
                 init_state, final_state,
                 av_cost, train_op,
-                inputs, targets, grad_norm=grad_norm)
+                inputs, targets, grad_norm=grad_norm,
+                reset_after=FLAGS.reset_steps)
             print('~~~~training perp: {}'.format(np.exp(epoch_loss)))
             # ditch dropout
-            sess.run(dropout.assign(1.0))
+            if dropout != 1.0:
+                sess.run(dropout.assign(1.0))
             valid_loss = run_epoch(sess, ptb.batch_iterator(valid,
                                                             FLAGS.batch_size,
-                                                            FLAGS.num_steps),
+                                                            FLAGS.sequence_length),
                                    init_state, final_state,
                                    av_cost, tf.no_op(),
                                    inputs, targets)
@@ -284,7 +301,10 @@ def main(_):
             with open(tv_filename, 'a') as fp:
                 fp.write('{}, {}, {}\n'.format(epoch_loss, avgnorm, valid_loss))
 
-    # get the test loss
+        # get the test loss
+        test_loss = run_epoch(
+            sess, ptb.batch_iterator(test, FLAGS.batch_size, FLAGS.sequence_length),
+            init_state, final_state, av_cost, tf.no_op(), inputs, targets)
 
 
 if __name__ == '__main__':
