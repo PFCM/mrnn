@@ -17,7 +17,7 @@ import rnndatasets.ptb as ptb
 flags = tf.app.flags
 
 # model parameters
-flags.DEFINE_string('cell', 'cp+-', 'what cell to use')
+flags.DEFINE_string('cell', 'vanilla', 'what cell to use')
 flags.DEFINE_bool('embed', False, 'whether or not to use word embeddings')
 flags.DEFINE_integer('width', 200, 'the width of each layer')
 flags.DEFINE_integer('layers', 2, 'how many hidden layers')
@@ -36,6 +36,7 @@ flags.DEFINE_float('dropout', 1.0, 'how much dropout (if at all)')
 
 # housekeeping
 flags.DEFINE_string('results_dir', None, 'where to store the results')
+flags.DEFINE_integer('seed', 1001, 'seed for the random numbers')
 
 FLAGS = flags.FLAGS
 
@@ -186,16 +187,16 @@ def loss(logits, targets):
     cost = tf.nn.seq2seq.sequence_loss_by_example(
         logits,
         targets,
-        [tf.ones_like(target) for target in targets])  # equal weighting
+        [tf.ones_like(target, dtype=tf.float32) for target in targets])  # equal weighting
     return tf.reduce_mean(cost)
 
 
-def train(cost, learning_rate, max_grad_norm=1000.0):
+def get_train_op(cost, learning_rate, max_grad_norm=1000.0):
     """gets a training op (ADAM)"""
-    tvars = tf.trainable_variables()
     opt = tf.train.AdamOptimizer(learning_rate)
-    grads, norm = tf.clip_by_global_norm(opt.compute_gradients(cost, tvars),
-                                      max_grad_norm)
+    grads_and_vars = opt.compute_gradients(cost)
+    grads, norm = tf.clip_by_global_norm([grad for grad, var in grads_and_vars],
+                                         max_grad_norm)
     return opt.apply_gradients(zip(grads, tvars)), norm
 
 
@@ -205,8 +206,7 @@ def main(_):
     print('\n~\n~~\n~~~\n...getting data...')
     train, valid, test, vocab = ptb.get_ptb_data()
     print('\n~\n~~\n~~~\n...getting model...', end='')
-    inputs, targets = get_placeholders(FLAGS.batch_size, FLAGS.sequence_length,
-                                       len(vocab))
+    inputs, targets = get_placeholders(FLAGS.batch_size, FLAGS.sequence_length)
 
     if FLAGS.dropout != 1.0:
         dropout = tf.get_variable('dropout', [], trainable=False,
@@ -219,18 +219,18 @@ def main(_):
 
     with tf.variable_scope('rnn_model') as scope:
         full_outputs, final_state, init_state = inference(
-            inputs, [FLAGS.width] * FLAGS.num_layers,
+            inputs, [FLAGS.width] * FLAGS.layers,
             len(vocab), dropout=dropout)
     print('\r{:~^60}'.format('got model'))
 
-    # get the loss
-    av_cost = loss(full_outputs, targets, len(vocab),
-                   FLAGS.batch_size, FLAGS.num_steps)
+    # get the training stuff
+    with tf.variable_scope('training'):
+        av_cost = loss(full_outputs, targets)
 
-    lr_var = tf.Variable(FLAGS.learning_rate,
-                         name='learning_rate',
-                         trainable=False)
-    train_op, grad_norm = train(av_cost, lr_var)
+        lr_var = tf.Variable(FLAGS.learning_rate,
+                             name='learning_rate',
+                             trainable=False)
+        train_op, grad_norm = get_train_op(av_cost, lr_var)
 
     lr = FLAGS.learning_rate
 
@@ -240,13 +240,15 @@ def main(_):
                               'models',
                               FLAGS.cell)
     model_name += '({})'.format(
-        '-'.join([str(FLAGS.width)] * FLAGS.num_layers))
+        '-'.join([str(FLAGS.width)] * FLAGS.layers))
     model_name += '-{}'  # for the step
 
     tv_filename = os.path.join(FLAGS.results_dir,
                                'training.txt')
     test_filename = os.path.join(FLAGS.results_dir,
                                  'test.txt')
+    if not os.path.exists(FLAGS.results_dir):
+        os.makedirs(FLAGS.results_dir, existok=True)
 
     sess = tf.Session()
     with sess.as_default():
@@ -280,7 +282,7 @@ def main(_):
             saver.save(sess, model_name, global_step=steps,
                        write_meta_graph=False)
             with open(tv_filename, 'a') as fp:
-                fp.write('{}, {}, {}\n'.format(epoch_loss, valid_loss))
+                fp.write('{}, {}, {}\n'.format(epoch_loss, avgnorm, valid_loss))
 
     # get the test loss
 
