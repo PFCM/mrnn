@@ -27,7 +27,7 @@ flags.DEFINE_integer('rank', 50, 'rank of the tensor decomposition, if using')
 flags.DEFINE_float('learning_rate', 0.01, 'base learning rate for ADAM')
 flags.DEFINE_integer('batch_size', 20, 'minibatch size')
 flags.DEFINE_integer('sequence_length', 35, 'how far we unroll BPTT')
-flags.DEFINE_float('grad_clip', 10.0, 'where to clip the gradients')
+flags.DEFINE_float('grad_clip', 10000.0, 'where to clip the gradients')
 # flags.DEFINE_integer('start_decay', 6, 'when to start the learning rate decay')
 # flags.DEFINE_float('decay_factor', 1.2, 'how much to divide the learning rate'
 #                    'by each epoch after start_decay')
@@ -120,12 +120,14 @@ def get_cell(input_size, hidden_size):
     elif FLAGS.cell == 'cp+':
         return mrnn.AdditiveCPCell(hidden_size, input_size, FLAGS.rank)
     elif FLAGS.cell == 'cp-del':
-        return mrnn.CPDeltaCell(hidden_size, input_size, FLAGS.rank)
+        return mrnn.CPDeltaCell(hidden_size, input_size, FLAGS.rank, weightnorm='partial')
     elif FLAGS.cell == 'simple_cp':
         return mrnn.SimpleCPCell(hidden_size, input_size, FLAGS.rank)
+    elif FLAGS.cell == 'cp-loss':
+        return mrnn.CPLossyIntegrator(hidden_size, input_size, FLAGS.rank)
     elif FLAGS.cell == 'lstm':
         return tf.nn.rnn_cell.BasicLSTMCell(hidden_size, input_size=input_size,
-                                            state_is_tuple=False)
+                                           state_is_tuple=False)
     elif FLAGS.cell == 'vanilla':
         return mrnn.VRNNCell(hidden_size, input_size=input_size)
     elif FLAGS.cell == 'vanilla-weightnorm':
@@ -202,7 +204,8 @@ def loss(logits, targets):
 
 def get_train_op(cost, learning_rate, max_grad_norm=1000.0, global_step=None):
     """gets a training op (ADAM)"""
-    opt = tf.train.AdamOptimizer(learning_rate)
+    # opt = tf.train.AdamOptimizer(learning_rate)
+    opt = tf.train.GradientDescentOptimizer(learning_rate)
     grads_and_vars = opt.compute_gradients(cost)
     grads, norm = tf.clip_by_global_norm([grad for grad, var in grads_and_vars],
                                          max_grad_norm)
@@ -243,9 +246,10 @@ def main(_):
         lr_var = tf.Variable(FLAGS.learning_rate,
                              name='learning_rate',
                              trainable=False)
-        train_op, grad_norm = get_train_op(av_cost, lr_var, 
+        train_op, grad_norm = get_train_op(av_cost, lr_var,
+                                           max_grad_norm=FLAGS.grad_clip,
                                            global_step=global_step)
-
+        print('{:~^60}'.format('(got training ops)'))
     lr = FLAGS.learning_rate
 
     saver = tf.train.Saver(tf.trainable_variables(),

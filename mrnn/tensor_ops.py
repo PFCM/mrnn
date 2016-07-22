@@ -236,7 +236,7 @@ def get_cp_tensor(shape, maxrank, name, weightnorm=False, dtype=tf.float32,
     if weightnorm == 'row':
         matrices.append(tf.get_variable('cp_decomp_gains', [maxrank, 1], dtype=dtype,
                                         trainable=trainable,
-                                        initializer=tf.constant_initializer(0.1)))
+                                        initializer=tf.constant_initializer(1.0)))
     return tuple(matrices)
 
 
