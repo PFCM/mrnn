@@ -5,6 +5,7 @@ from __future__ import print_function
 
 import time
 import os
+import shutil
 
 from six.moves import xrange
 
@@ -213,6 +214,24 @@ def get_train_op(cost, learning_rate, max_grad_norm=1000.0, global_step=None):
     return t_op, norm
 
 
+def write_params(results_dir):
+    """Counts the number of parameters in tf.trainable_variables()
+    and writes the number to a file in the results directory called
+    `params.txt`.
+    """
+    filename = os.path.join(results_dir, 'params.txt')
+    tvars = tf.trainable_variables()
+    total = 0
+    for var in tvars:
+        prod = 1
+        for dim in var.get_shape().as_list():
+            prod *= dim
+        total += prod
+    print('~~~Model has {} params.'.format(total))
+    with open(filename, 'w') as fp:
+        fp.write('{} trainable parameters.\n'.format(total))
+
+
 def main(_):
     """Do things"""
     tf.set_random_seed(FLAGS.seed)
@@ -261,8 +280,14 @@ def main(_):
                                'training.txt')
     test_filename = os.path.join(FLAGS.results_dir,
                                  'test.txt')
-    os.makedirs(FLAGS.results_dir, exist_ok=True)
-    os.makedirs(model_dir, exist_ok=True)
+    
+    best_valid_loss = np.inf
+    best_model_path = None
+    best_model_dir = os.path.join(model_dir, 'best')
+    os.makedirs(best_model_dir, exist_ok=True)
+    
+    # count and report the params
+    write_params(FLAGS.results_dir)
 
     sess = tf.Session()
     with sess.as_default():
@@ -293,18 +318,28 @@ def main(_):
                                    av_cost, tf.no_op(),
                                    inputs, targets)
             print('~~~~valid perp: {}'.format(np.exp(valid_loss)))
-            print('~' * 60)
             # save, write
             steps = global_step.eval()
-            saver.save(sess, model_name, global_step=steps,
-                       write_meta_graph=False)
+            path = saver.save(sess, model_name, global_step=steps,
+                              write_meta_graph=False)
+            if valid_loss < best_valid_loss:
+                print('{:~^60}'.format('new record'))
+                best_model_path = shutil.copy(path, best_model_dir)
+                best_valid_loss = valid_loss
+            else:
+                print('{:~^60}'.format('no improvement'))
+
             with open(tv_filename, 'a') as fp:
                 fp.write('{}, {}, {}\n'.format(epoch_loss, avgnorm, valid_loss))
-
+        # load the best model
+        print('~Loading best model: {}'.format(best_model_path))
+        saver.restore(sess, best_model_path)
         # get the test loss
         test_loss = run_epoch(
             sess, ptb.batch_iterator(test, FLAGS.batch_size, FLAGS.sequence_length),
             init_state, final_state, av_cost, tf.no_op(), inputs, targets)
+        with open(test_filename, 'w') as fp:
+            fp.write('Test cross-entropy: {}'.format(test_loss))
 
 
 if __name__ == '__main__':
