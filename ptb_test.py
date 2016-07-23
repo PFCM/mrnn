@@ -13,6 +13,7 @@ import numpy as np
 import tensorflow as tf
 
 import mrnn
+import mrnn.init as init
 import rnndatasets.ptb as ptb
 
 flags = tf.app.flags
@@ -24,7 +25,7 @@ flags.DEFINE_integer('width', 200, 'the width of each layer')
 flags.DEFINE_integer('layers', 2, 'how many hidden layers')
 flags.DEFINE_integer('rank', 50, 'rank of the tensor decomposition, if using')
 
-# training parameters -- defaults are as per the dropout LSTM paper
+# training parameters -- defaults are as per the dropout LSTM paper except with adam
 flags.DEFINE_float('learning_rate', 0.01, 'base learning rate for ADAM')
 flags.DEFINE_integer('batch_size', 20, 'minibatch size')
 flags.DEFINE_integer('sequence_length', 35, 'how far we unroll BPTT')
@@ -35,6 +36,7 @@ flags.DEFINE_float('grad_clip', 10000.0, 'where to clip the gradients')
 flags.DEFINE_integer('num_epochs', 15, 'how long to train for')
 flags.DEFINE_float('dropout', 1.0, 'how much dropout (if at all)')
 flags.DEFINE_integer('reset_steps', 0, 'how often to reset the state during training')
+flags.DEFINE_float('epsilon', 1e-8, '`a small constant for numerical stability`')
 
 
 # housekeeping
@@ -123,14 +125,15 @@ def get_cell(input_size, hidden_size):
     elif FLAGS.cell == 'cp-del':
         return mrnn.CPDeltaCell(hidden_size, input_size, FLAGS.rank, weightnorm='partial')
     elif FLAGS.cell == 'simple_cp':
-        return mrnn.SimpleCPCell(hidden_size, input_size, FLAGS.rank)
+        return mrnn.SimpleCPCell(hidden_size, input_size, FLAGS.rank, weightnorm='classic', nonlinearity=tf.nn.relu)
     elif FLAGS.cell == 'cp-loss':
         return mrnn.CPLossyIntegrator(hidden_size, input_size, FLAGS.rank)
     elif FLAGS.cell == 'lstm':
         return tf.nn.rnn_cell.BasicLSTMCell(hidden_size, input_size=input_size,
                                            state_is_tuple=False)
     elif FLAGS.cell == 'vanilla':
-        return mrnn.VRNNCell(hidden_size, input_size=input_size)
+        return mrnn.VRNNCell(hidden_size, input_size=input_size,
+                             hh_init=init.orthonormal_init(1.0))
     elif FLAGS.cell == 'vanilla-weightnorm':
         return mrnn.VRNNCell(hidden_size, input_size=input_size,
                              weightnorm='recurrent')
@@ -205,8 +208,8 @@ def loss(logits, targets):
 
 def get_train_op(cost, learning_rate, max_grad_norm=1000.0, global_step=None):
     """gets a training op (ADAM)"""
-    # opt = tf.train.AdamOptimizer(learning_rate)
-    opt = tf.train.GradientDescentOptimizer(learning_rate)
+    opt = tf.train.AdamOptimizer(learning_rate, epsilon=FLAGS.epsilon)
+    # opt = tf.train.GradientDescentOptimizer(learning_rate)
     grads_and_vars = opt.compute_gradients(cost)
     grads, norm = tf.clip_by_global_norm([grad for grad, var in grads_and_vars],
                                          max_grad_norm)
