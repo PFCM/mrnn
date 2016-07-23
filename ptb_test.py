@@ -133,10 +133,11 @@ def get_cell(input_size, hidden_size):
                                            state_is_tuple=False)
     elif FLAGS.cell == 'vanilla':
         return mrnn.VRNNCell(hidden_size, input_size=input_size,
-                             hh_init=init.orthonormal_init(1.0))
+                             hh_init=init.orthonormal_init(0.5))
     elif FLAGS.cell == 'vanilla-weightnorm':
         return mrnn.VRNNCell(hidden_size, input_size=input_size,
-                             weightnorm='recurrent')
+                             weightnorm='recurrent',
+                             hh_init=init.orthonormal_init(0.5))
     elif FLAGS.cell == 'irnn':
         return mrnn.IRNNCell(hidden_size, input_size=input_size)
     else:
