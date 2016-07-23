@@ -119,29 +119,24 @@ class CPResCell(tf.nn.rnn_cell.RNNCell):
         with tf.variable_scope(scope or type(self).__name__):
             # project the inputs and the states into the shared space
             # maybe weightnorm these guys
-            proj_in = _affine(inputs, self.rank, name='input_projection',
-                              weightnorm='classic')
-            proj_st = _affine(states, self.rank, name='output_projection',
-                              weightnorm='classic')
-            clipped = tf.nn.relu(proj_in * proj_st)
-            result = _affine(clipped, self.state_size, name='addition_projection',
-                             weightnorm='classic')
-            # with tf.variable_scope('pre_act', initializer=init.spectral_normalised_init(2.0)):
-            #    pre_activations = _tensor_logits(inputs, states, self.rank,
-            #                                     weightnorm='classic',
-            #                                     pad=True,
-            #                                     separate_pad=False,
-            #                                     name='pre_act')
-            #    cut = tf.nn.relu(pre_activations)
-            # with tf.variable_scope('post_act', initializer=init.spectral_normalised_init(2.0)):
-            # post_activations = _tensor_logits(cut, states, self.rank,
-            #                                  weightnorm=self._weightnorm,
-            #                                  pad=True,
-            #                                  separate_pad=False,
-            #                                  name='post_act')
-            #    post_activations = _affine(cut, self.state_size, name='cut_proj',
-            #                               weightnorm='classic')
-            # result = post_activations  # relu?
+            proj_in = _affine(inputs, self.state_size, name='input_projection',
+                              weightnorm='partial')
+            proj_in = tf.nn.relu(proj_in)
+            # proj_st = _affine(states, self.rank, name='output_projection',
+            #                   weightnorm='classic')
+            # clipped = tf.nn.relu(proj_in * proj_st)
+            # result = _affine(clipped, self.state_size, name='addition_projection',
+            #                 weightnorm='classic')
+            with tf.variable_scope('pre_act', initializer=init.spectral_normalised_init(1.1)):
+                pre_activations = _tensor_logits(proj_in, states, self.rank,
+                                                 weightnorm='partial',
+                                                 pad=True,
+                                                 separate_pad=False,
+                                                 name='pre_act')
+                cut = tf.nn.relu(pre_activations)
+                post_activations = _affine(pre_activations, self.state_size, name='cut_proj',
+                                           weightnorm='partial')
+            result = pre_activations
             result += states
         return result, result
 
@@ -197,6 +192,52 @@ class CPDeltaCell(tf.nn.rnn_cell.RNNCell):
         return result, result
 
 
+
+class CPLossyIntegrator(tf.nn.rnn_cell.RNNCell):
+    """Upon which all hopes are pinned"""
+
+    def __init__(self, num_units, num_inputs, rank, weightnorm=None):
+        self._num_units = num_units
+        self._num_inputs = num_inputs
+        self._rank = rank
+        self.weightnorm = weightnorm
+
+    @property
+    def rank(self):
+        return self._rank
+
+    @property
+    def state_size(self):
+        return self._num_units
+
+    @property
+    def input_size(self):
+        return self._num_inputs
+
+    @property
+    def output_size(self):
+        return self._num_units
+
+    def __call__(self, inputs, states, scope=None):
+        with tf.variable_scope(scope or type(self).__name__):
+            # project the input into the hidden feature space
+            with tf.variable_scope('input_projection', initializer=tf.random_normal_initializer(stddev=0.01)):
+                proj_in = _affine(inputs, self.state_size, name='cut_shift')
+                proj_in = tf.nn.relu(proj_in)
+                proj_in = _affine(inputs, self.state_size, name='state_proj')
+            # compute via a bilinear product some parts of the memory to abrade
+            with tf.variable_scope('abrasion', initializer=init.spectral_normalised_init(1.5)):
+                forgetting = _tensor_logits(inputs, states, self.rank,
+                                            pad=True, separate_pad=False)
+                forgetting = tf.nn.relu(forgetting)
+                forgetting = _affine(forgetting, self.state_size)
+
+            # combine the information
+            result = tf.nn.relu(states + proj_in - forgetting)
+            
+        return result, result
+    
+
 class AddSubCPCell(tf.nn.rnn_cell.RNNCell):
     """Basically difference between two of the below"""
 
@@ -238,7 +279,7 @@ class AddSubCPCell(tf.nn.rnn_cell.RNNCell):
                                           self.state_size],
                                          self.rank,
                                          'W1',
-                                         weightnorm=True,
+                                         weightnorm='partial',
                                          trainable=True)
             with tf.variable_scope('tensor_2',
                                    initializer=self._tensor_init):
@@ -247,15 +288,15 @@ class AddSubCPCell(tf.nn.rnn_cell.RNNCell):
                                           self.state_size],
                                          self.rank,
                                          'W2',
-                                         weightnorm=True,
+                                         weightnorm='partial',
                                          trainable=True)
             combo_1 = bilinear_product_cp(inputs, tensor_1, states)
             combo_2 = bilinear_product_cp(inputs, tensor_2, states)
 
             input_weights_1 = tf.get_variable('U1', shape=[self.input_size,
-                                                           self._input_projection])
+                                                           self.state_size])
             input_weights_2 = tf.get_variable('U2', shape=[self.input_size,
-                                                           self._input_projection])
+                                                           self.state_size])
             input_proj_1 = tf.matmul(inputs, input_weights_1)
             input_proj_2 = tf.matmul(inputs, input_weights_2)
             # biases
@@ -281,7 +322,7 @@ class AdditiveCPCell(tf.nn.rnn_cell.RNNCell):
         self._num_inputs = num_inputs
         self._nonlinearity = nonlinearity
         self._rank = rank
-        self._input_projection = input_projection or num_inputs
+        self._input_projection = input_projection or num_units
 
     @property
     def rank(self):
