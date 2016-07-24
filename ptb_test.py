@@ -204,8 +204,8 @@ def loss(logits, targets):
 
 def get_train_op(cost, learning_rate, max_grad_norm=1000.0, global_step=None):
     """gets a training op (ADAM)"""
-    # opt = tf.train.AdamOptimizer(learning_rate)
-    opt = tf.train.GradientDescentOptimizer(learning_rate)
+    opt = tf.train.AdamOptimizer(learning_rate)
+    # opt = tf.train.GradientDescentOptimizer(learning_rate)
     grads_and_vars = opt.compute_gradients(cost)
     grads, norm = tf.clip_by_global_norm([grad for grad, var in grads_and_vars],
                                          max_grad_norm)
