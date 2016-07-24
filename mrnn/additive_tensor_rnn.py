@@ -222,13 +222,15 @@ class CPLossyIntegrator(tf.nn.rnn_cell.RNNCell):
         with tf.variable_scope(scope or type(self).__name__):
             # project the input into the hidden feature space
             with tf.variable_scope('input_projection', initializer=tf.random_normal_initializer(stddev=0.01)):
-                proj_in = _affine(inputs, self.state_size)
+                proj_in = _affine(inputs, self.state_size, name='cut_shift')
                 proj_in = tf.nn.relu(proj_in)
-                
+                proj_in = _affine(inputs, self.state_size, name='state_proj')
             # compute via a bilinear product some parts of the memory to abrade
             with tf.variable_scope('abrasion', initializer=init.spectral_normalised_init(1.5)):
-                forgetting = _tensor_logits(inputs, states, self.rank)
+                forgetting = _tensor_logits(inputs, states, self.rank,
+                                            pad=True, separate_pad=False)
                 forgetting = tf.nn.relu(forgetting)
+                forgetting = _affine(forgetting, self.state_size)
 
             # combine the information
             result = tf.nn.relu(states + proj_in - forgetting)

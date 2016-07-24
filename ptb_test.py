@@ -5,6 +5,7 @@ from __future__ import print_function
 
 import time
 import os
+import shutil
 
 from six.moves import xrange
 
@@ -12,6 +13,7 @@ import numpy as np
 import tensorflow as tf
 
 import mrnn
+import mrnn.init as init
 import rnndatasets.ptb as ptb
 
 flags = tf.app.flags
@@ -23,7 +25,7 @@ flags.DEFINE_integer('width', 200, 'the width of each layer')
 flags.DEFINE_integer('layers', 2, 'how many hidden layers')
 flags.DEFINE_integer('rank', 50, 'rank of the tensor decomposition, if using')
 
-# training parameters -- defaults are as per the dropout LSTM paper
+# training parameters -- defaults are as per the dropout LSTM paper except with adam
 flags.DEFINE_float('learning_rate', 0.01, 'base learning rate for ADAM')
 flags.DEFINE_integer('batch_size', 20, 'minibatch size')
 flags.DEFINE_integer('sequence_length', 35, 'how far we unroll BPTT')
@@ -34,6 +36,7 @@ flags.DEFINE_float('grad_clip', 10000.0, 'where to clip the gradients')
 flags.DEFINE_integer('num_epochs', 15, 'how long to train for')
 flags.DEFINE_float('dropout', 1.0, 'how much dropout (if at all)')
 flags.DEFINE_integer('reset_steps', 0, 'how often to reset the state during training')
+flags.DEFINE_float('epsilon', 1e-8, '`a small constant for numerical stability`')
 
 
 # housekeeping
@@ -122,17 +125,19 @@ def get_cell(input_size, hidden_size):
     elif FLAGS.cell == 'cp-del':
         return mrnn.CPDeltaCell(hidden_size, input_size, FLAGS.rank, weightnorm='partial')
     elif FLAGS.cell == 'simple_cp':
-        return mrnn.SimpleCPCell(hidden_size, input_size, FLAGS.rank)
+        return mrnn.SimpleCPCell(hidden_size, input_size, FLAGS.rank, weightnorm='classic', nonlinearity=tf.nn.relu)
     elif FLAGS.cell == 'cp-loss':
         return mrnn.CPLossyIntegrator(hidden_size, input_size, FLAGS.rank)
     elif FLAGS.cell == 'lstm':
         return tf.nn.rnn_cell.BasicLSTMCell(hidden_size, input_size=input_size,
                                            state_is_tuple=False)
     elif FLAGS.cell == 'vanilla':
-        return mrnn.VRNNCell(hidden_size, input_size=input_size)
+        return mrnn.VRNNCell(hidden_size, input_size=input_size,
+                             hh_init=init.orthonormal_init(0.5))
     elif FLAGS.cell == 'vanilla-weightnorm':
         return mrnn.VRNNCell(hidden_size, input_size=input_size,
-                             weightnorm='recurrent')
+                             weightnorm='recurrent',
+                             hh_init=init.orthonormal_init(0.5))
     elif FLAGS.cell == 'irnn':
         return mrnn.IRNNCell(hidden_size, input_size=input_size)
     else:
@@ -204,7 +209,7 @@ def loss(logits, targets):
 
 def get_train_op(cost, learning_rate, max_grad_norm=1000.0, global_step=None):
     """gets a training op (ADAM)"""
-    opt = tf.train.AdamOptimizer(learning_rate)
+    opt = tf.train.AdamOptimizer(learning_rate, epsilon=FLAGS.epsilon)
     # opt = tf.train.GradientDescentOptimizer(learning_rate)
     grads_and_vars = opt.compute_gradients(cost)
     grads, norm = tf.clip_by_global_norm([grad for grad, var in grads_and_vars],
@@ -214,6 +219,24 @@ def get_train_op(cost, learning_rate, max_grad_norm=1000.0, global_step=None):
          in zip(grads, grads_and_vars)],
         global_step=global_step)
     return t_op, norm
+
+
+def write_params(results_dir):
+    """Counts the number of parameters in tf.trainable_variables()
+    and writes the number to a file in the results directory called
+    `params.txt`.
+    """
+    filename = os.path.join(results_dir, 'params.txt')
+    tvars = tf.trainable_variables()
+    total = 0
+    for var in tvars:
+        prod = 1
+        for dim in var.get_shape().as_list():
+            prod *= dim
+        total += prod
+    print('~~~Model has {} params.'.format(total))
+    with open(filename, 'w') as fp:
+        fp.write('{} trainable parameters.\n'.format(total))
 
 
 def main(_):
@@ -265,8 +288,14 @@ def main(_):
                                'training.txt')
     test_filename = os.path.join(FLAGS.results_dir,
                                  'test.txt')
-    os.makedirs(FLAGS.results_dir, exist_ok=True)
-    os.makedirs(model_dir, exist_ok=True)
+    
+    best_valid_loss = np.inf
+    best_model_path = None
+    best_model_dir = os.path.join(model_dir, 'best')
+    os.makedirs(best_model_dir, exist_ok=True)
+    
+    # count and report the params
+    write_params(FLAGS.results_dir)
 
     sess = tf.Session()
     with sess.as_default():
@@ -297,18 +326,28 @@ def main(_):
                                    av_cost, tf.no_op(),
                                    inputs, targets)
             print('~~~~valid perp: {}'.format(np.exp(valid_loss)))
-            print('~' * 60)
             # save, write
             steps = global_step.eval()
-            saver.save(sess, model_name, global_step=steps,
-                       write_meta_graph=False)
+            path = saver.save(sess, model_name, global_step=steps,
+                              write_meta_graph=False)
+            if valid_loss < best_valid_loss:
+                print('{:~^60}'.format('new record'))
+                best_model_path = shutil.copy(path, best_model_dir)
+                best_valid_loss = valid_loss
+            else:
+                print('{:~^60}'.format('no improvement'))
+
             with open(tv_filename, 'a') as fp:
                 fp.write('{}, {}, {}\n'.format(epoch_loss, avgnorm, valid_loss))
-
+        # load the best model
+        print('~Loading best model: {}'.format(best_model_path))
+        saver.restore(sess, best_model_path)
         # get the test loss
         test_loss = run_epoch(
             sess, ptb.batch_iterator(test, FLAGS.batch_size, FLAGS.sequence_length),
             init_state, final_state, av_cost, tf.no_op(), inputs, targets)
+        with open(test_filename, 'w') as fp:
+            fp.write('Test cross-entropy: {}'.format(test_loss))
 
 
 if __name__ == '__main__':

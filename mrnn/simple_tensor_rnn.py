@@ -133,7 +133,7 @@ class SimpleCPCell(tf.nn.rnn_cell.RNNCell):
     CP approximation of given rank."""
 
     def __init__(self, num_units, num_inputs, rank,
-                 nonlinearity=tf.nn.relu, weightnorm=False,
+                 nonlinearity=tf.nn.tanh, weightnorm=False,
                  separate_pad=True):
         self._num_units = num_units
         self._num_inputs = num_inputs
@@ -161,13 +161,13 @@ class SimpleCPCell(tf.nn.rnn_cell.RNNCell):
     def __call__(self, inputs, states, scope=None):
         """does the stuff"""
         with tf.variable_scope(scope or type(self).__name__,
-                               initializer=tf.random_normal_initializer(stddev=0.0001)):
+                               initializer=init.spectral_normalised_init(0.5)):
             # first we need to get the tensor
             if not self._separate_pad:
                 shape = [self._num_units+1,
                          self._num_units,
                          self._num_inputs+1]
-                
+
                 vec_a = tf.concat(
                     1, [inputs, tf.ones([inputs.get_shape()[0].value, 1])])
                 vec_b = tf.concat(
@@ -176,8 +176,7 @@ class SimpleCPCell(tf.nn.rnn_cell.RNNCell):
                 shape = [self._num_units,
                          self._num_units,
                          self._num_inputs]
-                vec_a, vec_b = inputs, states
-            
+                vec_a, vec_b = states, inputs
             tensor = get_cp_tensor(shape,
                                    self._rank,
                                    'W',
@@ -185,9 +184,7 @@ class SimpleCPCell(tf.nn.rnn_cell.RNNCell):
             result = bilinear_product_cp(vec_a, tensor, vec_b)
 
             if self._separate_pad:
-                # TODO: inits
-                # should we roll these up into one matmul?
-                # probably will be faster
+                # TODO: use the new handy things
                 if self._weightnorm:
                     in_weights = get_weightnormed_matrix(
                         [self._num_inputs, self._num_units],
@@ -211,9 +208,9 @@ class SimpleCPCell(tf.nn.rnn_cell.RNNCell):
                                        [self._num_units],
                                        initializer=tf.constant_initializer(0.0))
                 result += tf.nn.bias_add(
-                    tf.matmul(vec_a, in_weights) + tf.matmul(vec_b, rec_weights),
+                    tf.matmul(vec_a, rec_weights) + tf.matmul(vec_b, in_weights),
                     bias)
-            
+
             result = self._nonlinearity(result)
             return result, result
 
@@ -293,7 +290,6 @@ class SimpleTTCell(tf.nn.rnn_cell.RNNCell):
                                     initializer=tf.constant_initializer(0.0))
                 z = tf.nn.bias_add(tf.matmul(inputs, D) + tf.matmul(states, E), b)
                 result = result + z
-                
+
             result = self._nonlin(result)
             return result, result
-    

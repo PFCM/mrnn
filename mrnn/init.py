@@ -8,6 +8,14 @@ import numpy as np
 import tensorflow as tf
 
 
+def orthonormal_init(scale=1.0):
+    """Initialise a matrix to something random but
+    orthonormal"""
+    def _init(shape, dtype=tf.float32):
+        mat = np.random.normal(shape)
+        mat, _, _ = np.linalg.svd(mat)
+        return mat * scale
+
 
 def identity_initializer():
     """Initialise a variable to the identity.
