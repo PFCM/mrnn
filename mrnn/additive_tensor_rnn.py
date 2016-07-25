@@ -98,11 +98,10 @@ class CPResCell(tf.nn.rnn_cell.RNNCell):
         self._rank = rank
         self._weightnorm = weightnorm
 
-
     @property
     def rank(self):
         return self._rank
-        
+
     @property
     def state_size(self):
         return self._num_units
@@ -140,7 +139,7 @@ class CPResCell(tf.nn.rnn_cell.RNNCell):
             result += states
         return result, result
 
-        
+
 
 class CPDeltaCell(tf.nn.rnn_cell.RNNCell):
     """Upon which all hopes are pinned"""
@@ -234,9 +233,9 @@ class CPLossyIntegrator(tf.nn.rnn_cell.RNNCell):
 
             # combine the information
             result = tf.nn.relu(states + proj_in - forgetting)
-            
+
         return result, result
-    
+
 
 class AddSubCPCell(tf.nn.rnn_cell.RNNCell):
     """Basically difference between two of the below"""
