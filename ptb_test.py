@@ -125,7 +125,7 @@ def get_cell(input_size, hidden_size):
     elif FLAGS.cell == 'cp-del':
         return mrnn.CPDeltaCell(hidden_size, input_size, FLAGS.rank, weightnorm='partial')
     elif FLAGS.cell == 'simple_cp':
-        return mrnn.SimpleCPCell(hidden_size, input_size, FLAGS.rank, weightnorm='classic', nonlinearity=tf.nn.relu)
+        return mrnn.SimpleCPCell(hidden_size, input_size, FLAGS.rank, nonlinearity=tf.nn.tanh)
     elif FLAGS.cell == 'cp-loss':
         return mrnn.CPLossyIntegrator(hidden_size, input_size, FLAGS.rank)
     elif FLAGS.cell == 'lstm':
