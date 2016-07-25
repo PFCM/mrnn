@@ -138,6 +138,10 @@ def get_cell(input_size, hidden_size):
         return mrnn.VRNNCell(hidden_size, input_size=input_size,
                              weightnorm='recurrent',
                              hh_init=init.orthonormal_init(0.5))
+    elif FLAGS.cell == 'vanilla-layernorm':
+        return mrnn.VRNNCell(hidden_size, input_size=input_size,
+                             weightnorm='layer',
+                             hh_init=init.orthonormal_init(0.5))
     elif FLAGS.cell == 'irnn':
         return mrnn.IRNNCell(hidden_size, input_size=input_size)
     else:

@@ -91,3 +91,53 @@ def get_weightnormed_matrix(shape, axis=1, name='weightnorm',
             inv_norms = 1.0 / sqr_norms
 
         return gains * unnormed_w * inv_norms
+
+
+def layer_normalise(activations, gain_initialiser=1.0, bias_initialiser=0.0,
+                    add_bias=False):
+    """Performs layer normalisation, as per 
+    https://arxiv.org/abs/1607.06450
+
+    This adds a few variables and will attempt to reuse them if the outer
+    variable scope desires this.
+
+    Args:
+        activations: the computed activations for a layer that need to be re-scaled.
+            this is assumed to be `[batch_size, features]`.
+        gain_initialiser: where to start the gain parameters.
+        bias_initialiser: where to start the extra biases.
+        add_bias: whether to actually add biases -- there is a good chance you are
+            already adding biases when computing the activations, so it might be
+            pointless to add more.
+
+    Returns:
+        layer normalised activations -- see the paper for the precise formulation.
+    """
+    with tf.variable_scope('layer_normalisation'):
+        # first we need to compute the statistics
+        # this is done per example (we don't reduce through the batch dimension)
+        mu = tf.reduce_mean(activations, reduction_indices=1,
+                            keep_dims=True)  # [batch_size, 1]
+        # now center
+        centered = activations - mu  # need this to broadcast
+        
+        sigma = tf.reduce_mean(tf.square(centered),  # hope for broadcast
+                               reduction_indices=1, keep_dims=True)
+        inv_sigma = tf.rsqrt(sigma)
+        # get the gain coefficients
+        gains = tf.get_variable('gains', shape=[1, activations.get_shape()[1].value],
+                                initializer=tf.constant_initializer(gain_initialiser))
+        # getting these dimensions to work out is a little bit awkward
+        # the easiest way (but probably not the best) is to take the
+        # outer product of the gains and the variances giving us a matrix
+        # where each row is the gain vector multiplied by the inverse variance for the
+        # for that case. Storing this explicitly is probably wasteful.
+        scale = tf.matmul(inv_sigma, gains)
+        # elementwise multiply
+        result = scale * centered
+        # possibly add bias
+        if add_bias:
+            bias = tf.get_variable('biases', shape=[activations.get_shape()[1].value],
+                                   initializer=tf.constant_initializer(bias_initialiser))
+            result = tf.nn.bias_add(result, bias)
+        return result

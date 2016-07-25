@@ -146,7 +146,10 @@ class VRNNCell(tf.nn.rnn_cell.RNNCell):
 
             a = tf.matmul(state, hidden_weights)
             b = tf.matmul(inputs, input_weights)
-            output = self._nonlinearity(a + b + bias)
+            pre_activations = a + b
+            if self._weightnorm == 'layer':
+                pre_activations = hops.layer_normalise(pre_activations)
+            output = self._nonlinearity(pre_activations + bias)
         return output, output
 
 
