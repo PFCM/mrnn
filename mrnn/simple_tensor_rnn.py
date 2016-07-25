@@ -168,9 +168,9 @@ class SimpleCPCell(tf.nn.rnn_cell.RNNCell):
                          self._num_units,
                          self._num_inputs+1]
 
-                vec_a = tf.concat(
-                    1, [inputs, tf.ones([inputs.get_shape()[0].value, 1])])
                 vec_b = tf.concat(
+                    1, [inputs, tf.ones([inputs.get_shape()[0].value, 1])])
+                vec_a = tf.concat(
                     1, [states, tf.ones([inputs.get_shape()[0].value, 1])])
             else:
                 shape = [self._num_units,
