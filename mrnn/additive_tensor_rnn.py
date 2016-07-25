@@ -237,6 +237,51 @@ class CPLossyIntegrator(tf.nn.rnn_cell.RNNCell):
         return result, result
 
 
+class CPSimpleIntegrator(tf.nn.rnn_cell.RNNCell):
+    """Upon which all hopes are pinned"""
+
+    def __init__(self, num_units, num_inputs, rank, layernorm=False):
+        self._num_units = num_units
+        self._num_inputs = num_inputs
+        self._rank = rank
+        self.layernorm = layernorm
+
+    @property
+    def rank(self):
+        return self._rank
+
+    @property
+    def state_size(self):
+        return self._num_units
+
+    @property
+    def input_size(self):
+        return self._num_inputs
+
+    @property
+    def output_size(self):
+        return self._num_units
+
+    def __call__(self, inputs, states, scope=None):
+        with tf.variable_scope(scope or type(self).__name__):
+            # project the input into the hidden feature space
+            with tf.variable_scope('input_projection'):
+                pre_acts = _affine(inputs, self.state_size)
+                if self.layernorm:
+                    pre_acts = layer_normalise(pre_acts)
+                input_info = tf.nn.relu(pre_acts)
+            # compute via a bilinear product some parts of the memory to abrade
+            with tf.variable_scope('abrasion'):
+                neg_acts = _tensor_logits(inputs, states, self.rank, pad=False)
+                if self.layernorm:
+                    neg_acts = layer_normalise(neg_acts)
+                combined = -tf.nn.relu(neg_acts)
+                
+            update = input_info + combined
+        result = states + update
+        return result, result
+
+
 class AddSubCPCell(tf.nn.rnn_cell.RNNCell):
     """Basically difference between two of the below"""
 

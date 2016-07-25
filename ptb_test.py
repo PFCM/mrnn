@@ -153,6 +153,11 @@ def get_cell(input_size, hidden_size):
                                  separate_pad=False)
     elif FLAGS.cell == 'cp-loss':
         return mrnn.CPLossyIntegrator(hidden_size, input_size, FLAGS.rank)
+    elif FLAGS.cell == 'cp-int':
+        return mrnn.CPSimpleIntegrator(hidden_size, input_size, FLAGS.rank)
+    elif FLAGS.cell == 'cp-int-layernorm':
+        return mrnn.CPSimpleIntegrator(hidden_size, input_size, FLAGS.rank,
+                                       layernorm=True)
     elif FLAGS.cell == 'lstm':
         return tf.nn.rnn_cell.BasicLSTMCell(hidden_size, input_size=input_size,
                                             state_is_tuple=True)
