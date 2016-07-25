@@ -47,12 +47,14 @@ flags.DEFINE_integer('seed', 1001, 'seed for the random numbers')
 FLAGS = flags.FLAGS
 
 
-def fill_batch(input_vars, target_vars, data):
+def fill_batch(input_vars, target_vars, data, state_vars, states):
     """makes a feed dict"""
     feed = {}
     for vars, np_data in zip((input_vars, target_vars), data):
         for var, value in zip(vars, np_data.T):
             feed[var] = value
+    for svar, state in zip(state_vars, states):
+        feed[svar] = state
     return feed
 
 
@@ -63,29 +65,41 @@ def run_epoch(sess, data_iter, initial_state, final_state,
     costs = 0
     steps = 0
     gnorm = 0
-    try:  # might be a tuple
-        state = initial_state.eval(session=sess)
+    try:  # might be a tuple, possibly even a tuple of tuples :(
+        states = [initial_state.eval(session=sess)]
+        init_state_vars = [initial_state]
+        final_states = [final_state]
+        
     except AttributeError:
-        state = [act.eval(session=sess) for act in initial_state]
+        # in fact, if it is a tuple it will always be a tuple of tuples
+        init_state_vars = [svar 
+                           for cell_states in initial_state 
+                           for svar in cell_states]
+        states = [svar.eval(session=sess) for svar in init_state_vars]
+        final_states = [svar
+                        for cell_states in final_state
+                        for svar in cell_states]
     for batch in data_iter:
-        feed_dict = fill_batch(input_vars, target_vars, batch)
-        if reset_after > 0 and steps % reset_after == 0:
-            state = initial_state.eval(session=sess)
-        feed_dict[initial_state] = state
+        feed_dict = fill_batch(input_vars, target_vars, batch,
+                               init_state_vars, states)
         if grad_norm is None:
-            batch_loss, state, _ = sess.run(
-                [cost, final_state, train_op],
+            results = sess.run(
+                [cost, train_op] + final_states,
                 feed_dict=feed_dict)
-
+            batch_loss = results[0]
+            states = results[2:]
             costs += batch_loss
             steps += 1
             if steps % 10 == 0:
                 print('\r...({}) - xent: {}'.format(steps, costs/steps),
                       end='')
         else:
-            batch_loss, state, _, batch_gnorm = sess.run(
-                [cost, final_state, train_op, grad_norm],
+            results = sess.run(
+                [cost, train_op, grad_norm] + final_states,
                 feed_dict=feed_dict)
+            batch_gnorm = results[2]
+            batch_loss = results[0]
+            states = results[3:]
             gnorm += batch_gnorm
             costs += batch_loss
             steps += 1

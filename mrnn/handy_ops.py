@@ -94,7 +94,7 @@ def get_weightnormed_matrix(shape, axis=1, name='weightnorm',
 
 
 def layer_normalise(activations, gain_initialiser=1.0, bias_initialiser=0.0,
-                    add_bias=False):
+                    add_bias=False, name='layer_normalisation'):
     """Performs layer normalisation, as per
     https://arxiv.org/abs/1607.06450
 
@@ -114,7 +114,7 @@ def layer_normalise(activations, gain_initialiser=1.0, bias_initialiser=0.0,
         layer normalised activations -- see the paper for the precise
         formulation.
     """
-    with tf.variable_scope('layer_normalisation'):
+    with tf.variable_scope(name):
         # first we need to compute the statistics
         # this is done per example
         mu = tf.reduce_mean(activations, reduction_indices=1,
