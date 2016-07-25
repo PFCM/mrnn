@@ -24,6 +24,7 @@ flags.DEFINE_bool('embed', False, 'whether or not to use word embeddings')
 flags.DEFINE_integer('width', 200, 'the width of each layer')
 flags.DEFINE_integer('layers', 2, 'how many hidden layers')
 flags.DEFINE_integer('rank', 50, 'rank of the tensor decomposition, if using')
+flags.DEFINE_bool('layer_norm', False, 'Whether to use layer normalisation.')
 
 # training parameters -- defaults are as per the dropout LSTM paper except with adam
 flags.DEFINE_float('learning_rate', 0.01, 'base learning rate for ADAM')
@@ -62,7 +63,10 @@ def run_epoch(sess, data_iter, initial_state, final_state,
     costs = 0
     steps = 0
     gnorm = 0
-    state = initial_state.eval(session=sess)
+    try:  # might be a tuple
+        state = initial_state.eval(session=sess)
+    except AttributeError:
+        state = [act.eval(session=sess) for act in initial_state]
     for batch in data_iter:
         feed_dict = fill_batch(input_vars, target_vars, batch)
         if reset_after > 0 and steps % reset_after == 0:
@@ -76,7 +80,8 @@ def run_epoch(sess, data_iter, initial_state, final_state,
             costs += batch_loss
             steps += 1
             if steps % 10 == 0:
-                print('\r...({}) - xent: {}'.format(steps, costs/steps), end='')
+                print('\r...({}) - xent: {}'.format(steps, costs/steps),
+                      end='')
         else:
             batch_loss, state, _, batch_gnorm = sess.run(
                 [cost, final_state, train_op, grad_norm],
@@ -123,14 +128,16 @@ def get_cell(input_size, hidden_size):
     elif FLAGS.cell == 'cp+':
         return mrnn.AdditiveCPCell(hidden_size, input_size, FLAGS.rank)
     elif FLAGS.cell == 'cp-del':
-        return mrnn.CPDeltaCell(hidden_size, input_size, FLAGS.rank, weightnorm='partial')
+        return mrnn.CPDeltaCell(hidden_size, input_size, FLAGS.rank,
+                                weightnorm='partial')
     elif FLAGS.cell == 'simple_cp':
-        return mrnn.SimpleCPCell(hidden_size, input_size, FLAGS.rank, weightnorm='classic', nonlinearity=tf.nn.relu)
+        return mrnn.SimpleCPCell(hidden_size, input_size, FLAGS.rank,
+                                 weightnorm='classic', nonlinearity=tf.nn.relu)
     elif FLAGS.cell == 'cp-loss':
         return mrnn.CPLossyIntegrator(hidden_size, input_size, FLAGS.rank)
     elif FLAGS.cell == 'lstm':
         return tf.nn.rnn_cell.BasicLSTMCell(hidden_size, input_size=input_size,
-                                           state_is_tuple=False)
+                                            state_is_tuple=True)
     elif FLAGS.cell == 'vanilla':
         return mrnn.VRNNCell(hidden_size, input_size=input_size,
                              hh_init=init.orthonormal_init(0.5))
@@ -175,12 +182,18 @@ def inference(inputs, shape, vocab_size, dropout=1.0):
 
     cells = [get_cell(vocab_size, shape[0])]
 
+    state_is_tuple = FLAGS.cell == 'lstm'
+
     for i, layer in enumerate(shape[1:]):
         cells.append(get_cell(shape[i-1], layer))
     if dropout != 1.0:
         cells = [tf.nn.rnn_cell.DropoutWrapper(cell, input_keep_prob=dropout)
                  for cell in cells]
-    cell = tf.nn.rnn_cell.MultiRNNCell(cells)
+    if FLAGS.layer_norm:
+        cells = [mrnn.LayerNormWrapper(cell, separate_states=state_is_tuple)
+                 for cell in cells]
+
+    cell = tf.nn.rnn_cell.MultiRNNCell(cells, state_is_tuple=state_is_tuple)
 
     init_state = cell.zero_state(batch_size, tf.float32)
     outputs, state = tf.nn.rnn(cell, one_hot_inputs, initial_state=init_state,
@@ -216,10 +229,11 @@ def get_train_op(cost, learning_rate, max_grad_norm=1000.0, global_step=None):
     opt = tf.train.AdamOptimizer(learning_rate, epsilon=FLAGS.epsilon)
     # opt = tf.train.GradientDescentOptimizer(learning_rate)
     grads_and_vars = opt.compute_gradients(cost)
-    grads, norm = tf.clip_by_global_norm([grad for grad, var in grads_and_vars],
+    grads, norm = tf.clip_by_global_norm([grad
+                                          for grad, var in grads_and_vars],
                                          max_grad_norm)
     t_op = opt.apply_gradients(
-        [(grad, var) for grad, (_, var) 
+        [(grad, var) for grad, (_, var)
          in zip(grads, grads_and_vars)],
         global_step=global_step)
     return t_op, norm
@@ -292,12 +306,12 @@ def main(_):
                                'training.txt')
     test_filename = os.path.join(FLAGS.results_dir,
                                  'test.txt')
-    
+
     best_valid_loss = np.inf
     best_model_path = None
     best_model_dir = os.path.join(model_dir, 'best')
     os.makedirs(best_model_dir, exist_ok=True)
-    
+
     # count and report the params
     write_params(FLAGS.results_dir)
 
