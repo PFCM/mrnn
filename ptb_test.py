@@ -140,7 +140,12 @@ def get_cell(input_size, hidden_size):
     if FLAGS.cell == 'cp+-':
         return mrnn.AddSubCPCell(hidden_size, input_size, FLAGS.rank)
     elif FLAGS.cell == 'cp+':
-        return mrnn.AdditiveCPCell(hidden_size, input_size, FLAGS.rank)
+        return mrnn.AdditiveCPCell(hidden_size, input_size, FLAGS.rank,
+                                   nonlinearity=tf.nn.relu)
+    elif FLAGS.cell == 'cp+post':
+        return mrnn.AdditiveCPCell(hidden_size, input_size, FLAGS.rank,
+                                   nonlinearity=tf.nn.relu,
+                                   layernorm='post')
     elif FLAGS.cell == 'cp-del':
         return mrnn.CPDeltaCell(hidden_size, input_size, FLAGS.rank,
                                 weightnorm=None)
