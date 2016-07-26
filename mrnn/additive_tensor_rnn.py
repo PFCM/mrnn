@@ -267,17 +267,20 @@ class CPSimpleIntegrator(tf.nn.rnn_cell.RNNCell):
             # project the input into the hidden feature space
             with tf.variable_scope('input_projection'):
                 pre_acts = _affine(inputs, self.state_size)
-                if self.layernorm:
+                if self.layernorm == 'pre':
                     pre_acts = layer_normalise(pre_acts)
                 input_info = tf.nn.relu(pre_acts)
             # compute via a bilinear product some parts of the memory to abrade
             with tf.variable_scope('abrasion'):
                 neg_acts = _tensor_logits(inputs, states, self.rank, pad=False)
-                if self.layernorm:
+                if self.layernorm == 'pre':
                     neg_acts = layer_normalise(neg_acts)
                 combined = -tf.nn.relu(neg_acts)
                 
-            update = input_info + combined
+            if self.layernorm == 'post':
+                update = layer_normalise(input_info + combined)
+            else:
+                update = input_info + combined
         result = states + update
         return result, result
 
