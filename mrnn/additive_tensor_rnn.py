@@ -367,6 +367,7 @@ class AdditiveCPCell(tf.nn.rnn_cell.RNNCell):
         self._nonlinearity = nonlinearity
         self._rank = rank
         self._input_projection = input_projection or num_units
+        self.layernorm = layernorm
 
     @property
     def rank(self):
