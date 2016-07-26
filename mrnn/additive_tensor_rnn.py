@@ -361,7 +361,7 @@ class AdditiveCPCell(tf.nn.rnn_cell.RNNCell):
 
     def __init__(self, num_units, num_inputs, rank,
                  input_projection=None,
-                 nonlinearity=tf.nn.relu):
+                 nonlinearity=tf.nn.relu, layernorm=False):
         self._num_units = num_units
         self._num_inputs = num_inputs
         self._nonlinearity = nonlinearity
@@ -407,6 +407,15 @@ class AdditiveCPCell(tf.nn.rnn_cell.RNNCell):
             # apply a bias pre-nonlinearity
             bias = tf.get_variable('b', shape=[self.output_size],
                                    initializer=tf.constant_initializer(0.0))
-            result = self._nonlinearity(combination + input_proj + bias)
+            if self.layernorm == 'pre':
+                activations = layer_normalise(combination + input_proj + bias)
+            else:
+                activations = combination + input_proj + bias
+
+            result = self._nonlinearity(activations)
+            
+            if self.layernorm == 'post':
+                result = layer_normalise(result)
+
             result = result + states
         return result, result
