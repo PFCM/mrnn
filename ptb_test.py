@@ -163,6 +163,8 @@ def get_cell(input_size, hidden_size):
     elif FLAGS.cell == 'cp-int-post':
         return mrnn.CPSimpleIntegrator(hidden_size, input_size, FLAGS.rank,
                                        layernorm='post')
+    elif FLAGS.cell == 'cp-res':
+        return mrnn.CPResCell(hidden_size, input_size, FLAGS.rank)
     elif FLAGS.cell == 'lstm':
         return tf.nn.rnn_cell.BasicLSTMCell(hidden_size, input_size=input_size,
                                             state_is_tuple=True)
