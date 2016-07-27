@@ -92,11 +92,10 @@ def _affine(data, new_size, weightnorm=None, name='affine'):
 class CPResCell(tf.nn.rnn_cell.RNNCell):
     """try something JIC"""
 
-    def __init__(self, num_units, num_inputs, rank, weightnorm=None):
+    def __init__(self, num_units, num_inputs, rank):
         self._num_units = num_units
         self._num_inputs = num_inputs
         self._rank = rank
-        self._weightnorm = weightnorm
 
     @property
     def rank(self):
@@ -116,27 +115,24 @@ class CPResCell(tf.nn.rnn_cell.RNNCell):
 
     def __call__(self, inputs, states, scope=None):
         with tf.variable_scope(scope or type(self).__name__):
-            # project the inputs and the states into the shared space
-            # maybe weightnorm these guys
-            proj_in = _affine(inputs, self.state_size, name='input_projection',
-                              weightnorm='partial')
-            proj_in = tf.nn.relu(proj_in)
-            # proj_st = _affine(states, self.rank, name='output_projection',
-            #                   weightnorm='classic')
-            # clipped = tf.nn.relu(proj_in * proj_st)
-            # result = _affine(clipped, self.state_size, name='addition_projection',
-            #                 weightnorm='classic')
+            # first combine the inputs and the state
             with tf.variable_scope('pre_act', initializer=init.spectral_normalised_init(1.1)):
-                pre_activations = _tensor_logits(proj_in, states, self.rank,
-                                                 weightnorm='partial',
+                pre_activations = _tensor_logits(inputs, states, self.rank,
+                                                 weightnorm=None,
                                                  pad=True,
                                                  separate_pad=False,
                                                  name='pre_act')
-                cut = tf.nn.relu(pre_activations)
-                post_activations = _affine(pre_activations, self.state_size, name='cut_proj',
-                                           weightnorm='partial')
-            result = pre_activations
-            result += states
+                # layer norm with extra bias
+                pre_activations = layer_normalise(pre_activations, add_bias=True)
+        # make the cut
+        cut = tf.nn.relu(pre_activations)
+        # project back into weight pace
+        post_activations = _affine(pre_activations, self.state_size, name='cut_proj',
+                                   weightnorm=None)
+        # re-normalise
+        result = layer_normalise(post_activations, add_bias=True)
+        # make the skip connection
+        result += states
         return result, result
 
 
