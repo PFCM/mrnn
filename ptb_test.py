@@ -38,6 +38,7 @@ flags.DEFINE_integer('num_epochs', 15, 'how long to train for')
 flags.DEFINE_float('dropout', 1.0, 'how much dropout (if at all)')
 flags.DEFINE_integer('reset_steps', 0, 'how often to reset the state during training')
 flags.DEFINE_float('epsilon', 1e-8, '`a small constant for numerical stability`')
+flags.DEFINE_float('l2', 0.0, 'how much l2 regularisation to put on the weights')
 
 
 # housekeeping
@@ -45,6 +46,13 @@ flags.DEFINE_string('results_dir', None, 'where to store the results')
 flags.DEFINE_integer('seed', 1001, 'seed for the random numbers')
 
 FLAGS = flags.FLAGS
+
+
+def l2_reg(amount):
+    def _reg(var):
+        return tf.nn.l2_loss(var) * amount
+
+    return _reg
 
 
 def fill_batch(input_vars, target_vars, data, state_vars, states):
@@ -258,6 +266,10 @@ def get_train_op(cost, learning_rate, max_grad_norm=1000.0, global_step=None):
     """gets a training op (ADAM)"""
     opt = tf.train.AdamOptimizer(learning_rate, epsilon=FLAGS.epsilon)
     # opt = tf.train.GradientDescentOptimizer(learning_rate)
+    # we also add the regularisation losses in here
+    reg_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
+    if reg_losses:
+        cost += tf.add_n(reg_losses)
     grads_and_vars = opt.compute_gradients(cost)
     grads, norm = tf.clip_by_global_norm([grad
                                           for grad, var in grads_and_vars],
@@ -304,7 +316,12 @@ def main(_):
 
     global_step = tf.Variable(0, name='global_step')
 
-    with tf.variable_scope('rnn_model') as scope:
+    if FLAGS.l2 != 0.0:
+        reg = l2_reg(FLAGS.l2)
+    else:
+        reg = None
+    
+    with tf.variable_scope('rnn_model', regularizer=reg) as scope:
         full_outputs, final_state, init_state = inference(
             inputs, [FLAGS.width] * FLAGS.layers,
             len(vocab), dropout=dropout)
