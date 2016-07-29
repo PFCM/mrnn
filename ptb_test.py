@@ -73,6 +73,7 @@ def run_epoch(sess, data_iter, initial_state, final_state,
     costs = 0
     steps = 0
     gnorm = 0
+    words_per_batch = FLAGS.sequence_length * FLAGS.batch_size
     try:  # might be a tuple, possibly even a tuple of tuples :(
         states = [initial_state.eval(session=sess)]
         init_state_vars = [initial_state]
@@ -88,6 +89,9 @@ def run_epoch(sess, data_iter, initial_state, final_state,
                         for cell_states in final_state
                         for svar in cell_states]
     for batch in data_iter:
+
+        start = time.time()
+        
         feed_dict = fill_batch(input_vars, target_vars, batch,
                                init_state_vars, states)
         if grad_norm is None:
@@ -116,6 +120,9 @@ def run_epoch(sess, data_iter, initial_state, final_state,
                     '\r...({}) - xent: {} (g norm {})'.format(
                         steps, costs/steps, gnorm/steps),
                     end='', flush=True)
+        if steps % 10 == 0:
+            print('   (wps: {:.0f})'.format(words_per_batch / (time.time() - start)),
+                  end='')
     print('..epoch over')
     if grad_norm is None:
         return costs/steps

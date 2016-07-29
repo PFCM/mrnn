@@ -116,23 +116,24 @@ class CPResCell(tf.nn.rnn_cell.RNNCell):
     def __call__(self, inputs, states, scope=None):
         with tf.variable_scope(scope or type(self).__name__):
             # first combine the inputs and the state
-            with tf.variable_scope('pre_act', initializer=init.spectral_normalised_init(1.1)):
+            with tf.variable_scope('pre_act', initializer=init.orthonormal_init(0.5)):
                 pre_activations = _tensor_logits(inputs, states, self.rank,
                                                  weightnorm=None,
-                                                 pad=True,
+                                                 pad=False,
                                                  separate_pad=False,
                                                  name='pre_act')
                 # layer norm with extra bias
                 pre_activations = layer_normalise(pre_activations, add_bias=True)
-        # make the cut
-        cut = tf.nn.relu(pre_activations)
-        # project back into weight pace
-        post_activations = _affine(pre_activations, self.state_size, name='cut_proj',
-                                   weightnorm=None)
-        # re-normalise
-        result = layer_normalise(post_activations, add_bias=True)
-        # make the skip connection
-        result += states
+            # make the cut
+            cut = tf.nn.relu(pre_activations)
+            # project back into weight pace
+            with tf.variable_scope('post_act', initializer=init.orthonormal_init(0.5)):
+                post_activations = _affine(pre_activations, self.state_size, name='cut_proj',
+                                           weightnorm=None)
+                # re-normalise
+                result = layer_normalise(post_activations)
+            # make the skip connection
+            result += states
         return result, result
 
 
@@ -270,14 +271,14 @@ class CPSimpleIntegrator(tf.nn.rnn_cell.RNNCell):
             with tf.variable_scope('abrasion'):
                 neg_acts = _tensor_logits(inputs, states, self.rank, pad=False)
                 if self.layernorm == 'pre':
-                    neg_acts = layer_normalise(neg_acts)
+                    neg_acts = layer_normalise(neg_acts, add_bias=True, bias_init=1.0)
                 combined = -tf.nn.relu(neg_acts)
                 
             if self.layernorm == 'post':
                 update = layer_normalise(input_info + combined)
             else:
                 update = input_info + combined
-        result = states + update
+        result = tf.nn.relu(states + update)
         return result, result
 
 
@@ -390,7 +391,7 @@ class AdditiveCPCell(tf.nn.rnn_cell.RNNCell):
             # sub scope for the tensor init
             # should inherit reuse from outer scope
             with tf.variable_scope('tensor',
-                                   initializer=init.spectral_normalised_init(1.5)):
+                                   initializer=init.orthonormal_init(0.5)):
                 tensor = get_cp_tensor([self.input_size,
                                         self.output_size,
                                         self.state_size],
