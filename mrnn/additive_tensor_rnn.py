@@ -89,6 +89,41 @@ def _affine(data, new_size, weightnorm=None, name='affine'):
     return tf.nn.bias_add(tf.matmul(data, weights), bias)
 
 
+class CPGateCell(tf.nn.rnn_cell.RNNCell):
+    """A forget gate and an accumulator"""
+
+    def __init__(self, num_units, rank):
+        self._num_units = num_units
+        self._rank = rank
+
+    @property
+    def rank(self):
+        return self._rank
+
+    @property
+    def state_size(self):
+        return self._num_units
+
+    @property
+    def output_size(self):
+        return self._num_units
+
+    def __call__(self, inputs, state, scope=None):
+        with tf.variable_scope(scope or type(self).__name__):
+            with tf.variable_scope('accumulator'):
+                input_acts = _affine(inputs, self.state_size)
+                update = tf.nn.tanh(input_acts)
+
+            with tf.variable_scope('forgetter',
+                                   initializer=init.orthonormal_init(0.5)):
+                forget_acts = _tensor_logits(
+                    inputs, state, self.rank, pad=True)
+                forget_gate = tf.nn.sigmoid(forget_acts)
+
+            result = forget_gate * state + update
+        return result, result
+
+
 class CPResCell(tf.nn.rnn_cell.RNNCell):
     """try something JIC"""
 
@@ -273,7 +308,7 @@ class CPSimpleIntegrator(tf.nn.rnn_cell.RNNCell):
                 if self.layernorm == 'pre':
                     neg_acts = layer_normalise(neg_acts, add_bias=True, bias_init=1.0)
                 combined = -tf.nn.relu(neg_acts)
-                
+
             if self.layernorm == 'post':
                 update = layer_normalise(input_info + combined)
             else:
@@ -414,7 +449,7 @@ class AdditiveCPCell(tf.nn.rnn_cell.RNNCell):
                 activations = combination + input_proj + bias
 
             result = self._nonlinearity(activations)
-            
+
             if self.layernorm == 'post':
                 result = layer_normalise(result)
 

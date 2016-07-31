@@ -78,11 +78,11 @@ def run_epoch(sess, data_iter, initial_state, final_state,
         states = [initial_state.eval(session=sess)]
         init_state_vars = [initial_state]
         final_states = [final_state]
-        
+
     except AttributeError:
         # in fact, if it is a tuple it will always be a tuple of tuples
-        init_state_vars = [svar 
-                           for cell_states in initial_state 
+        init_state_vars = [svar
+                           for cell_states in initial_state
                            for svar in cell_states]
         states = [svar.eval(session=sess) for svar in init_state_vars]
         final_states = [svar
@@ -91,7 +91,7 @@ def run_epoch(sess, data_iter, initial_state, final_state,
     for batch in data_iter:
 
         start = time.time()
-        
+
         feed_dict = fill_batch(input_vars, target_vars, batch,
                                init_state_vars, states)
         if grad_norm is None:
@@ -165,7 +165,7 @@ def get_cell(input_size, hidden_size):
         return mrnn.CPDeltaCell(hidden_size, input_size, FLAGS.rank,
                                 weightnorm=None)
     elif FLAGS.cell == 'simple_cp':
-        return mrnn.SimpleCPCell(hidden_size, input_size, FLAGS.rank, 
+        return mrnn.SimpleCPCell(hidden_size, input_size, FLAGS.rank,
                                  nonlinearity=tf.nn.tanh)
     elif FLAGS.cell == 'simple_cp-alldecomp':
         return mrnn.SimpleCPCell(hidden_size, input_size, FLAGS.rank,
@@ -196,6 +196,8 @@ def get_cell(input_size, hidden_size):
                              hh_init=init.orthonormal_init(0.5))
     elif FLAGS.cell == 'irnn':
         return mrnn.IRNNCell(hidden_size, input_size=input_size)
+    elif FLAGS.cell == 'cp-gate':
+        return mrnn.CPGateCell(hidden_size, FLAGS.rank)
     else:
         raise ValueError('unknown cell: {}'.format(FLAGS.cell))
 
@@ -327,7 +329,7 @@ def main(_):
         reg = l2_reg(FLAGS.l2)
     else:
         reg = None
-    
+
     with tf.variable_scope('rnn_model', regularizer=reg) as scope:
         full_outputs, final_state, init_state = inference(
             inputs, [FLAGS.width] * FLAGS.layers,
