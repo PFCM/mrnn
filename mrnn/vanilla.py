@@ -77,6 +77,8 @@ class VRNNCell(tf.nn.rnn_cell.RNNCell):
                  hh_init=tf.random_normal_initializer(stddev=0.15),
                  xh_init=tf.random_normal_initializer(stddev=0.15),
                  b_init=tf.constant_initializer(0.0, dtype=tf.float32),
+                 weight_noise=0.0,
+                 keep_prob=1.0,
                  weightnorm=False):
         """
         Sets up a cell.
@@ -105,6 +107,8 @@ class VRNNCell(tf.nn.rnn_cell.RNNCell):
         self._xh_init = xh_init
         self._b_init = b_init
         self._weightnorm = weightnorm
+        self._keep_prob = keep_prob
+        self._weight_noise = weight_noise
 
     @property
     def input_size(self):
@@ -142,6 +146,14 @@ class VRNNCell(tf.nn.rnn_cell.RNNCell):
                     initializer=self._hh_init)
             bias = tf.get_variable('b', [self.state_size],
                                    initializer=self._b_init)
+
+            if self._keep_prob != 1.0 or self._weight_noise != 0.0:
+                hidden_weights = hops.variational_wrapper(
+                    hidden_weights, self._keep_prob, self._weight_noise,
+                    name='hidden_wrapper')
+                input_weights = hops.variational_wrapper(
+                    input_weights, self._keep_prob, self._weight_noise,
+                    name='input_wrapper')
 
             a = tf.matmul(state, hidden_weights)
             b = tf.matmul(inputs, input_weights)

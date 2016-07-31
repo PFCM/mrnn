@@ -40,6 +40,10 @@ flags.DEFINE_integer('reset_steps', 0, 'how often to reset the state during trai
 flags.DEFINE_float('epsilon', 1e-8, '`a small constant for numerical stability`')
 flags.DEFINE_float('l2', 0.0, 'how much l2 regularisation to put on the weights')
 
+# these are only on a couple of cells atm.
+flags.DEFINE_float('variational_dropout', 1.0, 'how much proper dropout')
+flags.DEFINE_float('weight_noise', 0.0, 'add noise?')
+
 
 # housekeeping
 flags.DEFINE_string('results_dir', None, 'where to store the results')
@@ -68,7 +72,7 @@ def fill_batch(input_vars, target_vars, data, state_vars, states):
 
 def run_epoch(sess, data_iter, initial_state, final_state,
               cost, train_op, input_vars, target_vars,
-              reset_after=0, grad_norm=None):
+              reset_after=0, grad_norm=None, sample_weights=None):
     """Runs an epoch of training"""
     costs = 0
     steps = 0
@@ -91,6 +95,8 @@ def run_epoch(sess, data_iter, initial_state, final_state,
     for batch in data_iter:
 
         start = time.time()
+        if sample_weights:  # do weight noise / dropout
+            sess.run(sample_weights)
 
         feed_dict = fill_batch(input_vars, target_vars, batch,
                                init_state_vars, states)
@@ -150,7 +156,7 @@ def get_placeholders(batch_size, sequence_length):
     return inputs, targets
 
 
-def get_cell(input_size, hidden_size):
+def get_cell(input_size, hidden_size, var_dropout, weight_noise):
     """Gets a cell with given params, according to FLAGS.cell"""
     if FLAGS.cell == 'cp+-':
         return mrnn.AddSubCPCell(hidden_size, input_size, FLAGS.rank)
@@ -185,7 +191,9 @@ def get_cell(input_size, hidden_size):
                                             state_is_tuple=True)
     elif FLAGS.cell == 'vanilla':
         return mrnn.VRNNCell(hidden_size, input_size=input_size,
-                             hh_init=init.orthonormal_init(0.5))
+                             hh_init=init.orthonormal_init(0.5),
+                             keep_prob=var_dropout,
+                             weight_noise=weight_noise)
     elif FLAGS.cell == 'vanilla-weightnorm':
         return mrnn.VRNNCell(hidden_size, input_size=input_size,
                              weightnorm='recurrent',
@@ -202,7 +210,8 @@ def get_cell(input_size, hidden_size):
         raise ValueError('unknown cell: {}'.format(FLAGS.cell))
 
 
-def inference(inputs, shape, vocab_size, dropout=1.0):
+def inference(inputs, shape, vocab_size, dropout=1.0, var_dropout=1.0,
+              weight_noise=0.0):
     """Build a model.
 
     Args:
@@ -227,12 +236,12 @@ def inference(inputs, shape, vocab_size, dropout=1.0):
     one_hot_inputs = [tf.one_hot(step, vocab_size) for step in inputs]
     batch_size = inputs[0].get_shape()[0].value
 
-    cells = [get_cell(vocab_size, shape[0])]
+    cells = [get_cell(vocab_size, shape[0], var_dropout, weight_noise)]
 
     state_is_tuple = FLAGS.cell == 'lstm'
 
     for i, layer in enumerate(shape[1:]):
-        cells.append(get_cell(shape[i-1], layer))
+        cells.append(get_cell(shape[i-1], layer, var_dropout, weight_noise))
     if dropout != 1.0:
         if FLAGS.cell != 'cp-gate':
             cells = [tf.nn.rnn_cell.DropoutWrapper(cell, input_keep_prob=dropout)
@@ -327,6 +336,18 @@ def main(_):
     else:
         dropout = 1.0
 
+    if FLAGS.variational_dropout != 1.0:
+        var_dropout = tf.get_variable('var_dropout', trainable=False,
+                                      initializer=FLAGS.variational_dropout)
+    else:
+        var_dropout = 1.0
+
+    if FLAGS.weight_noise != 0.0:
+        weight_noise = tf.get_variable('weight_noise', trainable=False,
+                                       initializer=FLAGS.weight_noise)
+    else:
+        weight_noise = 0.0
+
     global_step = tf.Variable(0, name='global_step')
 
     if FLAGS.l2 != 0.0:
@@ -337,7 +358,8 @@ def main(_):
     with tf.variable_scope('rnn_model', regularizer=reg) as scope:
         full_outputs, final_state, init_state = inference(
             inputs, [FLAGS.width] * FLAGS.layers,
-            len(vocab), dropout=dropout)
+            len(vocab), dropout=dropout, var_dropout=var_dropout,
+            weight_noise=weight_noise)
     print('\r{:~^60}'.format('got model'))
 
     # get the training stuff
@@ -378,6 +400,9 @@ def main(_):
     sess = tf.Session()
     with sess.as_default():
         print('..initialising..', end='', flush=True)
+        sample_weights = mrnn.merge_variational_initialisers()
+        if sample_weights:
+            sess.run(sample_weights)
         sess.run(tf.initialize_all_variables())
         print('\r{:~^60}'.format('initialised'))
 
@@ -385,6 +410,10 @@ def main(_):
             print('~~Epoch: {}'.format(epoch+1))
             if dropout != 1.0:
                 sess.run(dropout.assign(FLAGS.dropout))
+            if var_dropout != 1.0:
+                sess.run(var_dropout.assign(FLAGS.variational_dropout))
+            if weight_noise != 0.0:
+                sess.run(weight_noise.assign(FLAGS.weight_noise))
             epoch_loss, avgnorm = run_epoch(
                 sess, ptb.batch_iterator(train,
                                          FLAGS.batch_size,
@@ -392,11 +421,18 @@ def main(_):
                 init_state, final_state,
                 av_cost, train_op,
                 inputs, targets, grad_norm=grad_norm,
-                reset_after=FLAGS.reset_steps)
+                reset_after=FLAGS.reset_steps,
+                sample_weights=sample_weights)
             print('~~~~training perp: {}'.format(np.exp(epoch_loss)))
             # ditch dropout
             if dropout != 1.0:
                 sess.run(dropout.assign(1.0))
+            if var_dropout != 1.0:
+                sess.run(var_dropout.assign(1.0))
+            if weight_noise != 0.0:
+                sess.run(weight_noise.assign(0.0))
+            if sample_weights:  # sample some clean weights for validation time
+                sess.run(sample_weights)
             valid_loss = run_epoch(sess, ptb.batch_iterator(valid,
                                                             FLAGS.batch_size,
                                                             FLAGS.sequence_length),

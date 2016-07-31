@@ -11,6 +11,63 @@ import tensorflow as tf
 logger = logging.getLogger(__name__)
 
 
+def variational_wrapper(variable, keep_prob=1.0, weight_noise=0.0, name=None):
+    """Wraps a variable in a stochastic layer, which either adds Gaussian
+    noise or multiplies by a binary mask.
+
+    The key is that it will only happen once unless you keep calling the
+    noise variable's initializer -- this is so that you can do it properly
+    for recurrent nets.
+
+    Initializers are added to the collection `VARIATIONAL_INITIALISERS` with
+    and S because I'm not an American. The function
+    merge_variational_initialisers is provided for convenience. These need to
+    be run BEFORE trying to initialize everything else and again everytime
+    you want a new sample of weights.
+
+    Args:
+        variable: the variable to wrap
+        keep_prob: float or tensor: the probability an entry in `variable`
+            remains. If an entry is kept it is scaled up by 1/keep_prob.
+        weight_noise: standard deviation of gaussian noise added to elements of
+            `variable`. If 0.0 nothing is added.
+    """
+    with tf.variable_scope(name or 'variational_wrapper'):
+        if weight_noise != 0.0:
+            with tf.variable_scope('weight_noise'):
+                gaussian = tf.get_variable(
+                    'noise',
+                    initializer=tf.random_normal(
+                        variable.get_shape().as_list(), stddev=weight_noise),
+                    collections=['VARIATIONAL_MASKS'])
+                tf.add_to_collection('VARIATIONAL_INITIALISERS',
+                                     gaussian.initializer)
+                x = gaussian + variable
+        if keep_prob != 1.0:
+            with tf.variable_scope('dropout'):
+                keep_prob = tf.convert_to_tensor(keep_prob)
+                mask = keep_prob
+                noise_var = tf.get_variable(
+                    'mask_noise',
+                    initializer=tf.random_uniform(
+                        variable.get_shape().as_list()),
+                    collections=['VARIATIONAL_MASKS'])
+                tf.add_to_collection('VARIATIONAL_INITIALISERS',
+                                     noise_var.initializer)
+                mask += noise_var
+                binary_mask = tf.floor(mask)
+                x = tf.div(variable, keep_prob) * binary_mask
+        x.set_shape(variable.get_shape())
+        return x
+
+
+def merge_variational_initialisers():
+    """Looks up all the ops in VARIATIONAL_INITIALISERS and groups them"""
+    inits = tf.get_collection('VARIATIONAL_INITIALISERS')
+    if inits:
+        return tf.group(*inits)
+
+
 def possibly_weightnormed_var(shape, normtype, name, trainable=True):
     """Gets a variable which may or may not be weightnormed, depending on the
     `normtype`."""
