@@ -234,8 +234,12 @@ def inference(inputs, shape, vocab_size, dropout=1.0):
     for i, layer in enumerate(shape[1:]):
         cells.append(get_cell(shape[i-1], layer))
     if dropout != 1.0:
-        cells = [tf.nn.rnn_cell.DropoutWrapper(cell, input_keep_prob=dropout)
-                 for cell in cells]
+        if FLAGS.cell != 'cp-gate':
+            cells = [tf.nn.rnn_cell.DropoutWrapper(cell, input_keep_prob=dropout)
+                     for cell in cells]
+        else:
+            for cell in cells:
+                cell._dropout = dropout
     if FLAGS.layer_norm:
         cells = [mrnn.LayerNormWrapper(cell, separate_states=state_is_tuple)
                  for cell in cells]
