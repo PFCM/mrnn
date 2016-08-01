@@ -201,7 +201,9 @@ def get_cell(input_size, hidden_size, var_dropout, weight_noise):
     elif FLAGS.cell == 'vanilla-layernorm':
         return mrnn.VRNNCell(hidden_size, input_size=input_size,
                              weightnorm='layer',
-                             hh_init=init.orthonormal_init(0.5))
+                             hh_init=init.orthonormal_init(0.5),
+                             keep_prob=var_dropout,
+                             weight_noise=weight_noise)
     elif FLAGS.cell == 'irnn':
         return mrnn.IRNNCell(hidden_size, input_size=input_size)
     elif FLAGS.cell == 'cp-gate':

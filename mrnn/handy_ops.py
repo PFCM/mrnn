@@ -39,7 +39,8 @@ def variational_wrapper(variable, keep_prob=1.0, weight_noise=0.0, name=None):
                     'noise',
                     initializer=tf.random_normal(
                         variable.get_shape().as_list(), stddev=weight_noise),
-                    collections=['VARIATIONAL_MASKS'])
+                    collections=['VARIATIONAL_MASKS'],
+                    trainable=False)
                 tf.add_to_collection('VARIATIONAL_INITIALISERS',
                                      gaussian.initializer)
                 x = gaussian + variable
@@ -51,7 +52,8 @@ def variational_wrapper(variable, keep_prob=1.0, weight_noise=0.0, name=None):
                     'mask_noise',
                     initializer=tf.random_uniform(
                         variable.get_shape().as_list()),
-                    collections=['VARIATIONAL_MASKS'])
+                    collections=['VARIATIONAL_MASKS'],
+                    trainable=False)
                 tf.add_to_collection('VARIATIONAL_INITIALISERS',
                                      noise_var.initializer)
                 mask += noise_var

@@ -130,7 +130,7 @@ class CPGateCell(tf.nn.rnn_cell.RNNCell):
                                                   bias_initialiser=0.0)
                 forget_gate = tf.nn.sigmoid(forget_acts)
 
-            result = forget_gate * state + update
+            result = forget_gate * state + (1.0-forget_gate) * update
         return result, result
 
 
