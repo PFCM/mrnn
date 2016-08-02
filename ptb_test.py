@@ -346,7 +346,8 @@ def main(_):
 
     if FLAGS.weight_noise != 0.0:
         weight_noise = tf.get_variable('weight_noise', trainable=False,
-                                       initializer=FLAGS.weight_noise)
+                                       initializer=FLAGS.weight_noise,
+                                       collections=[tf.GraphKeys.LOCAL_VARIABLES])
     else:
         weight_noise = 0.0
 
@@ -403,7 +404,9 @@ def main(_):
     with sess.as_default():
         print('..initialising..', end='', flush=True)
         sample_weights = mrnn.merge_variational_initialisers()
+        sess.run(tf.initialize_local_variables())
         if sample_weights:
+            print('--initialising variational wrappers', end='')
             sess.run(sample_weights)
         sess.run(tf.initialize_all_variables())
         print('\r{:~^60}'.format('initialised'))

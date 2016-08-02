@@ -92,11 +92,13 @@ def _affine(data, new_size, weightnorm=None, name='affine'):
 class CPGateCell(tf.nn.rnn_cell.RNNCell):
     """A forget gate and an accumulator"""
 
-    def __init__(self, num_units, rank, dropout=1.0, layernorm=''):
+    def __init__(self, num_units, rank, dropout=1.0, layernorm='',
+                 weight_noise=0.0):
         self._num_units = num_units
         self._rank = rank
         self._dropout = dropout
         self.layernorm = layernorm
+        self.weight_noise = weight_noise
 
     @property
     def rank(self):
@@ -119,7 +121,9 @@ class CPGateCell(tf.nn.rnn_cell.RNNCell):
                     input_acts = layer_normalise(input_acts)
                 update = tf.nn.relu(input_acts)
                 if self._dropout != 1.0:
-                    update = tf.nn.dropout(update, self._dropout)
+                    # update = tf.nn.dropout(update, self._dropout)
+                    update = variational_wrapper(
+                        update, keep_prob=self._dropout)
 
             with tf.variable_scope('forgetter',
                                    initializer=init.orthonormal_init(1.0)):

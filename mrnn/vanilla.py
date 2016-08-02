@@ -147,13 +147,20 @@ class VRNNCell(tf.nn.rnn_cell.RNNCell):
             bias = tf.get_variable('b', [self.state_size],
                                    initializer=self._b_init)
 
-            if self._keep_prob != 1.0 or self._weight_noise != 0.0:
+            if self._weight_noise != 0.0:
                 hidden_weights = hops.variational_wrapper(
-                    hidden_weights, self._keep_prob, self._weight_noise,
-                    name='hidden_wrapper')
+                    hidden_weights, weight_noise=self._weight_noise,
+                    name='hidden_weightnoise')
                 input_weights = hops.variational_wrapper(
-                    input_weights, self._keep_prob, self._weight_noise,
-                    name='input_wrapper')
+                    input_weights, weight_noise=self._weight_noise,
+                    name='input_weightnoise')
+            if self._keep_prob != 0.0:
+                inputs = hops.variational_wrapper(
+                    inputs, keep_prob=self._keep_prob,
+                    name='input_dropout')
+                state = hops.variational_wrapper(
+                    state, keep_prob=self._keep_prob,
+                    name='state_dropout')
 
             a = tf.matmul(state, hidden_weights)
             b = tf.matmul(inputs, input_weights)
