@@ -62,10 +62,10 @@ def _tensor_logits(inputs, states, rank, weightnorm=None, pad=True,
     if pad and separate_pad:
         # then we have to do these guys too
         input_weights = possibly_weightnormed_var([input_size, state_size],
-                                                  None,
+                                                  weightnorm,
                                                   name + 'input_weights')
         state_weights = possibly_weightnormed_var([state_size, state_size],
-                                                  'classic',
+                                                  weightnorm,
                                                   name + 'state_weights')
         bias = tf.get_variable(name+'bias', dtype=tf.float32,
                                shape=[state_size],
