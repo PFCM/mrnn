@@ -33,6 +33,7 @@ def variational_wrapper(variable, keep_prob=1.0, weight_noise=0.0, name=None):
             `variable`. If 0.0 nothing is added.
     """
     with tf.variable_scope(name or 'variational_wrapper'):
+        x = None
         if weight_noise != 0.0:
             with tf.variable_scope('weight_noise'):
                 gaussian = tf.get_variable(
@@ -59,8 +60,10 @@ def variational_wrapper(variable, keep_prob=1.0, weight_noise=0.0, name=None):
                 mask += noise_var
                 binary_mask = tf.floor(mask)
                 x = tf.div(variable, keep_prob) * binary_mask
-        x.set_shape(variable.get_shape())
-        return x
+        if x:
+            x.set_shape(variable.get_shape())
+            return x
+        return variable
 
 
 def merge_variational_initialisers():
