@@ -62,10 +62,10 @@ def _tensor_logits(inputs, states, rank, weightnorm=None, pad=True,
     if pad and separate_pad:
         # then we have to do these guys too
         input_weights = possibly_weightnormed_var([input_size, state_size],
-                                                  None,
+                                                  weightnorm,
                                                   name + 'input_weights')
         state_weights = possibly_weightnormed_var([state_size, state_size],
-                                                  'classic',
+                                                  weightnorm,
                                                   name + 'state_weights')
         bias = tf.get_variable(name+'bias', dtype=tf.float32,
                                shape=[state_size],
@@ -128,7 +128,8 @@ class CPGateCell(tf.nn.rnn_cell.RNNCell):
             with tf.variable_scope('forgetter',
                                    initializer=init.orthonormal_init(1.0)):
                 forget_acts = _tensor_logits(
-                    inputs, state, self.rank, pad=True, separate_pad=True)
+                    inputs, state, self.rank, pad=True, separate_pad=True,
+                    weightnorm=None)
                 if 'pre' in self.layernorm and 'forget' in self.layernorm:
                     forget_acts = layer_normalise(forget_acts, add_bias=True,
                                                   bias_initialiser=0.0)
