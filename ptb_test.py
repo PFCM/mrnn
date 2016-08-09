@@ -235,7 +235,11 @@ def inference(inputs, shape, vocab_size, dropout=1.0, var_dropout=1.0,
     # first we are going to want to get the one-hot inputs
     # biiigg -- could make a non-trainable identity matrix and do embedding
     # lookup?
-    one_hot_inputs = [tf.one_hot(step, vocab_size) for step in inputs]
+    if inputs[0].dtype == tf.int32:
+        one_hot_inputs = [tf.one_hot(step, vocab_size) for step in inputs]
+    # else just assume they are already float vectors
+    else:
+        one_hot_inputs = inputs
     batch_size = inputs[0].get_shape()[0].value
 
     cells = [get_cell(vocab_size, shape[0], var_dropout, weight_noise)]
