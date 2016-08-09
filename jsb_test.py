@@ -83,7 +83,7 @@ def main(_):
     # start by getting the data
     print('...getting data', end='')
     train, valid, test = jsb.get_data()
-    
+
     inputs, targets = get_placeholders(FLAGS.batch_size,
                                        FLAGS.sequence_length)
     print('\r{:\\^60}'.format('got data'))
@@ -107,6 +107,7 @@ def main(_):
     print('\r{:\\^60}'.format('got train ops'))
 
     # do saving etc
+    saver = tf.train.Saver(tf.trainable_variables() + [global_step])
 
     sess = tf.Session()
     with sess.as_default():
@@ -119,6 +120,8 @@ def main(_):
 
         bar.start(num_steps)
 
+        best_valid_nll = 100000
+        best_model_path = ''
         for epoch in xrange(FLAGS.num_epochs):
             for data in jsb.batch_iterator(train, FLAGS.batch_size, FLAGS.sequence_length):
                 feed = fill_feed(inputs, targets, data)
@@ -144,10 +147,18 @@ def main(_):
             print('Epoch {}'.format(epoch+1))
             print('~~ valid xent: {}'.format(valid_xent/valid_step))
             print('~~ valid  nll: {}'.format(valid_nll/valid_step))
-                
+            valid_nll /= valid_step
+            if valid_nll < best_valid_nll:
+                print('~~ (new record)')
+                best_model_path = saver.save(sess,
+                                             os.path.join(FLAGS.results_dir,
+                                                          'models',
+                                                          FLAGS.cell),
+                                             global_step=step)
 
         bar.finish()
-        
+        # load best model and do test
+
 
 if __name__ == '__main__':
     tf.app.run()
