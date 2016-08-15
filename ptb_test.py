@@ -208,6 +208,8 @@ def get_cell(input_size, hidden_size, var_dropout, weight_noise):
         return mrnn.IRNNCell(hidden_size, input_size=input_size)
     elif FLAGS.cell == 'cp-gate':
         return mrnn.CPGateCell(hidden_size, FLAGS.rank)
+    elif FLAGS.cell == 'gru':
+        return tf.nn.rnn_cell.GRUCell(hidden_size)
     else:
         raise ValueError('unknown cell: {}'.format(FLAGS.cell))
 
@@ -259,7 +261,10 @@ def inference(inputs, shape, vocab_size, dropout=1.0, var_dropout=1.0,
         cells = [mrnn.LayerNormWrapper(cell, separate_states=state_is_tuple)
                  for cell in cells]
 
-    cell = tf.nn.rnn_cell.MultiRNNCell(cells, state_is_tuple=state_is_tuple)
+    if len(cells) > 1:
+        cell = tf.nn.rnn_cell.MultiRNNCell(cells, state_is_tuple=state_is_tuple)
+    else:
+        cell = cells[0]
 
     init_state = cell.zero_state(batch_size, tf.float32)
     outputs, state = tf.nn.rnn(cell, one_hot_inputs, initial_state=init_state,

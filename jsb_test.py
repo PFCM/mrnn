@@ -67,15 +67,28 @@ def fill_feed(input_vars, target_vars, data):
 
 
 def negative_log_likelihood(logits, targets):
-    """Gets the NLL the logits assign to targets. Conveniently, this
-    corresponds to the dot product of the target with the log-sigmoid
-    activations at each step. We then average over timesteps and batches,
-    this seems to give us numbers similar to everyone else."""
-    logits = [tf.log(tf.sigmoid(logit)) for logit in logits]
-    probs = [tf.batch_matmul(tf.expand_dims(step, 1),
-                             tf.expand_dims(targ, 2))
-             for step, targ in zip(logits, targets)]
+    """Gets the NLL the logits assign to targets, assuming they're all
+    to be independently sigmoided."""
+    # if we rescale the targets so off is -1 and on is 1
+    # then we can multiply through the logits
+    # and sigmoid gives us the probabilities :)
+    # because 1-sigmoid(x) = sigmoid(-x)
+    targets = [(2.0 * targ) - 1.0 for targ in targets]
+    probs = [tf.sigmoid(logit * targ) for logit, targ in zip(logits, targets)]
+    probs = [tf.reduce_sum(tf.log(prob), reduction_indices=1) for prob in probs]
     return -tf.reduce_mean(tf.pack(probs))
+
+
+def count_params():
+    """count trainable variables"""
+    tvars = tf.trainable_variables()
+    total = 0
+    for var in tvars:
+        prod = 1
+        for dim in var.get_shape().as_list():
+            prod *= dim
+        total += prod
+    return total
 
 
 def main(_):
@@ -101,19 +114,37 @@ def main(_):
         loss_op = sigmoid_xent(all_outputs, targets)
         nll_op = negative_log_likelihood(all_outputs, targets)
 
-        train_op, grad_norm = ptb_test.get_train_op(loss_op, FLAGS.learning_rate,
+        train_op, grad_norm = ptb_test.get_train_op(nll_op, FLAGS.learning_rate,
                                                     max_grad_norm=FLAGS.grad_clip,
                                                     global_step=global_step)
     print('\r{:\\^60}'.format('got train ops'))
-
+    print('{:/^60}'.format('{} params'.format(count_params())))
     # do saving etc
-    saver = tf.train.Saver(tf.trainable_variables() + [global_step])
+    saver = tf.train.Saver(tf.trainable_variables() + [global_step], max_to_keep=1)
+    # make sure we have somewhere to write
+    os.makedirs(FLAGS.results_dir, exist_ok=True)
 
+    def test_model(all_data):
+        """convenience for gathering statistics"""
+        nll = 0
+        xent = 0
+        step = 0
+        for data in jsb.batch_iterator(all_data, FLAGS.batch_size, FLAGS.sequence_length):
+            feed = fill_feed(inputs, targets, data)
+
+            batch_xent, batch_nll = sess.run([loss_op, nll_op],
+                                             feed_dict=feed)
+        
+            xent += batch_xent
+            nll += batch_nll
+            step += 1
+        return xent/step, nll/step
+    
     sess = tf.Session()
     with sess.as_default():
         print('..initialising', end='')
         sess.run(tf.initialize_all_variables())
-        print('\r{:/^60}'.format('initialised'))
+        print('\r{:\\^60}'.format('initialised'))
 
         bar = get_progressbar()
         num_steps = train.shape[0] * FLAGS.num_epochs // (FLAGS.batch_size * FLAGS.sequence_length)
@@ -131,33 +162,28 @@ def main(_):
                 step = global_step.eval()
                 bar.update(step, xent=batch_xent)
 
-            valid_nll = 0
-            valid_xent = 0
-            valid_step = 0
-            for data in jsb.batch_iterator(valid, FLAGS.batch_size, FLAGS.sequence_length):
-                feed = fill_feed(inputs, targets, data)
-
-                batch_xent, batch_nll = sess.run([loss_op, nll_op],
-                                                 feed_dict=feed)
-
-                valid_xent += batch_xent
-                valid_nll += batch_nll
-                valid_step += 1
+            valid_xent, valid_nll = test_model(valid)
 
             print('Epoch {}'.format(epoch+1))
-            print('~~ valid xent: {}'.format(valid_xent/valid_step))
-            print('~~ valid  nll: {}'.format(valid_nll/valid_step))
-            valid_nll /= valid_step
+            print('~~ valid xent: {}'.format(valid_xent))
+            print('~~ valid  nll: {}'.format(valid_nll))
+            
             if valid_nll < best_valid_nll:
                 print('~~ (new record)')
                 best_model_path = saver.save(sess,
                                              os.path.join(FLAGS.results_dir,
-                                                          'models',
-                                                          FLAGS.cell),
+                                                          FLAGS.cell + '.checkpoint'),
+                                             write_meta_graph=False,
                                              global_step=step)
+                best_valid_nll = valid_nll
 
         bar.finish()
         # load best model and do test
+        print('~~ Loading best model for final results')
+        saver.restore(sess, best_model_path)
+        print('Test  xent: {}, nll: {}'.format(*test_model(test)))
+        print('Valid xent: {}, nll: {}'.format(*test_model(valid)))
+        print('Train xent: {}, nll: {}'.format(*test_model(train)))
 
 
 if __name__ == '__main__':
