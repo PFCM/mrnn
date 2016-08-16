@@ -60,7 +60,7 @@ def variational_wrapper(variable, keep_prob=1.0, weight_noise=0.0, name=None):
                 mask += noise_var
                 binary_mask = tf.floor(mask)
                 x = tf.div(variable, keep_prob) * binary_mask
-        if x:
+        if x is not None:
             x.set_shape(variable.get_shape())
             return x
         return variable

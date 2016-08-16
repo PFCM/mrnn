@@ -102,9 +102,18 @@ def main(_):
     print('\r{:\\^60}'.format('got data'))
 
     print('...getting model', end='')
+
+    if FLAGS.weight_noise != 0.0:
+        weight_noise = tf.get_variable('weight_noise', trainable=False,
+                                       initializer=FLAGS.weight_noise,
+                                       collections=[tf.GraphKeys.LOCAL_VARIABLES])
+    else:
+        weight_noise = 0.0
+    
     with tf.variable_scope('rnn'):
         all_outputs, final_state, init_state = ptb_test.inference(
-            inputs, [FLAGS.width] * FLAGS.layers, jsb.NUM_FEATURES)
+            inputs, [FLAGS.width] * FLAGS.layers, jsb.NUM_FEATURES,
+            weight_noise=weight_noise)
     print('\r{:/^60}'.format('got model'))
 
     global_step = tf.Variable(0, name='global_step', trainable=False)
@@ -143,6 +152,11 @@ def main(_):
     sess = tf.Session()
     with sess.as_default():
         print('..initialising', end='')
+        sample_weights = mrnn.merge_variational_initialisers()
+        sess.run(tf.initialize_local_variables())
+        if sample_weights is not None:
+            print('(initialising variational wrappers)')
+            sess.run(sample_weights)
         sess.run(tf.initialize_all_variables())
         print('\r{:\\^60}'.format('initialised'))
 
@@ -154,14 +168,21 @@ def main(_):
         best_valid_nll = 100000
         best_model_path = ''
         for epoch in xrange(FLAGS.num_epochs):
+            if weight_noise != 0.0:
+                sess.run(weight_noise.assign(FLAGS.weight_noise))
             for data in jsb.batch_iterator(train, FLAGS.batch_size, FLAGS.sequence_length):
                 feed = fill_feed(inputs, targets, data)
-
+                if sample_weights is not None:
+                    sess.run(sample_weights)
                 batch_xent, _ = sess.run([loss_op, train_op],
                                          feed_dict=feed)
                 step = global_step.eval()
                 bar.update(step, xent=batch_xent)
 
+            if weight_noise != 0.0:
+                sess.run(weight_noise.assign(0.0))
+            if sample_weights is not None:
+                sess.run(sample_weights)
             valid_xent, valid_nll = test_model(valid)
 
             print('Epoch {}'.format(epoch+1))
