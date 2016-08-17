@@ -53,7 +53,7 @@ def get_progressbar():
         widgets=['[', progressbar.Percentage(), '] ',
                  '(>₃>)｢ ',
                  progressbar.Bar(marker='~', left='', right='|'),
-                 ' (', progressbar.DynamicMessage('xent'), ')',
+                 ' (', progressbar.DynamicMessage('nll'), ')',
                  '{', progressbar.ETA(), '}'],
         redirect_stdout=True)
 
@@ -174,10 +174,10 @@ def main(_):
                 feed = fill_feed(inputs, targets, data)
                 if sample_weights is not None:
                     sess.run(sample_weights)
-                batch_xent, _ = sess.run([loss_op, train_op],
-                                         feed_dict=feed)
+                batch_xent, batch_nll, _ = sess.run([loss_op, nll_op, train_op],
+                                                     feed_dict=feed)
                 step = global_step.eval()
-                bar.update(step, xent=batch_xent)
+                bar.update(step, nll=batch_nll)
 
             if weight_noise != 0.0:
                 sess.run(weight_noise.assign(0.0))
@@ -202,9 +202,18 @@ def main(_):
         # load best model and do test
         print('~~ Loading best model for final results')
         saver.restore(sess, best_model_path)
-        print('Test  xent: {}, nll: {}'.format(*test_model(test)))
-        print('Valid xent: {}, nll: {}'.format(*test_model(valid)))
-        print('Train xent: {}, nll: {}'.format(*test_model(train)))
+        test_xent, test_nll = test_model(test)
+        valid_xent, valid_nll = test_model(valid)
+        train_xent, train_nll = test_model(train)
+        print('Test  xent: {}, nll: {}'.format(test_xent, test_nll))
+        print('Valid xent: {}, nll: {}'.format(valid_xent, valid_nll))
+        print('Train xent: {}, nll: {}'.format(train_xent, train_nll))
+
+        results_filename = os.path.join(FLAGS.results_dir, 'earlystopped_results.txt')
+        with open(results_filename, 'w') as fp:
+            fp.write('Test  xent: {}, nll: {}\n'.format(test_xent, test_nll))
+            fp.write('Valid xent: {}, nll: {}\n'.format(valid_xent, valid_nll))
+            fp.write('Train xent: {}, nll: {}\n'.format(train_xent, train_nll))
 
 
 if __name__ == '__main__':
