@@ -61,7 +61,7 @@ def get_progressbar():
 def fill_feed(input_vars, target_vars, data):
     feed = {}
     for vars, np_data in zip((input_vars, target_vars), data):
-        for var, value in zip(vars, np_data.transpose([1,0,2])):
+        for var, value in zip(vars, np_data.transpose([1, 0, 2])):
             feed[var] = value
     return feed
 
@@ -75,7 +75,8 @@ def negative_log_likelihood(logits, targets):
     # because 1-sigmoid(x) = sigmoid(-x)
     targets = [(2.0 * targ) - 1.0 for targ in targets]
     probs = [tf.sigmoid(logit * targ) for logit, targ in zip(logits, targets)]
-    probs = [tf.reduce_sum(tf.log(prob), reduction_indices=1) for prob in probs]
+    probs = [tf.reduce_sum(tf.log(prob), reduction_indices=1)
+             for prob in probs]
     return -tf.reduce_mean(tf.pack(probs))
 
 
@@ -104,12 +105,13 @@ def main(_):
     print('...getting model', end='')
 
     if FLAGS.weight_noise != 0.0:
-        weight_noise = tf.get_variable('weight_noise', trainable=False,
-                                       initializer=FLAGS.weight_noise,
-                                       collections=[tf.GraphKeys.LOCAL_VARIABLES])
+        weight_noise = tf.get_variable(
+            'weight_noise', trainable=False,
+            initializer=FLAGS.weight_noise,
+            collections=[tf.GraphKeys.LOCAL_VARIABLES])
     else:
         weight_noise = 0.0
-    
+
     with tf.variable_scope('rnn'):
         all_outputs, final_state, init_state = ptb_test.inference(
             inputs, [FLAGS.width] * FLAGS.layers, jsb.NUM_FEATURES,
@@ -123,13 +125,14 @@ def main(_):
         loss_op = sigmoid_xent(all_outputs, targets)
         nll_op = negative_log_likelihood(all_outputs, targets)
 
-        train_op, grad_norm = ptb_test.get_train_op(nll_op, FLAGS.learning_rate,
-                                                    max_grad_norm=FLAGS.grad_clip,
-                                                    global_step=global_step)
+        train_op, grad_norm = ptb_test.get_train_op(
+            nll_op, FLAGS.learning_rate, max_grad_norm=FLAGS.grad_clip,
+            global_step=global_step)
     print('\r{:\\^60}'.format('got train ops'))
     print('{:/^60}'.format('{} params'.format(count_params())))
     # do saving etc
-    saver = tf.train.Saver(tf.trainable_variables() + [global_step], max_to_keep=1)
+    saver = tf.train.Saver(
+        tf.trainable_variables() + [global_step], max_to_keep=1)
     # make sure we have somewhere to write
     os.makedirs(FLAGS.results_dir, exist_ok=True)
 
@@ -143,12 +146,12 @@ def main(_):
 
             batch_xent, batch_nll = sess.run([loss_op, nll_op],
                                              feed_dict=feed)
-        
+
             xent += batch_xent
             nll += batch_nll
             step += 1
         return xent/step, nll/step
-    
+
     sess = tf.Session()
     with sess.as_default():
         print('..initialising', end='')
@@ -188,7 +191,7 @@ def main(_):
             print('Epoch {}'.format(epoch+1))
             print('~~ valid xent: {}'.format(valid_xent))
             print('~~ valid  nll: {}'.format(valid_nll))
-            
+
             if valid_nll < best_valid_nll:
                 print('~~ (new record)')
                 best_model_path = saver.save(sess,

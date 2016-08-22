@@ -22,7 +22,7 @@ flags = tf.app.flags
 flags.DEFINE_string('cell', 'vanilla', 'what cell to use')
 flags.DEFINE_bool('embed', False, 'whether or not to use word embeddings')
 flags.DEFINE_integer('width', 200, 'the width of each layer')
-flags.DEFINE_integer('layers', 2, 'how many hidden layers')
+flags.DEFINE_integer('layers', 1, 'how many hidden layers')
 flags.DEFINE_integer('rank', 50, 'rank of the tensor decomposition, if using')
 flags.DEFINE_bool('layer_norm', False, 'Whether to use layer normalisation.')
 
