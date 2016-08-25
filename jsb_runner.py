@@ -6,30 +6,37 @@ import time
 import shutil
 import subprocess
 
-results_dir = 'jsb_gridsearch'
+results_dir = 'jsb_gridsearch_rank'
 
-cell_values = ['vanilla', 'cp-gate', 'gru', 'lstm', 'simple-cp']
+cell_values = [
+    # 'vanilla',
+    'cp-gate',
+    # 'gru',
+    # 'lstm',
+    'simple_cp']
 lr_values = ['0.1', '0.01', '0.001']
 batch_sizes = ['4', '8', '16', '32']
-sequence_lengths = ['10', '25', '35', '50', '75', '100']
+sequence_lengths = ['25', '35', '50', '75', '100']
+ranks = ['1', '5', '10', '25', '50', '100']
 
 grid_iter = itertools.product(cell_values, lr_values, batch_sizes,
-                              sequence_lengths)
+                              sequence_lengths, ranks)
 
-for cell, lr, batch_size, seq_len in grid_iter:
+for cell, lr, batch_size, seq_len, rank in grid_iter:
     run_dir = os.path.join(
-        results_dir, '{}-{}-{}-{}'.format(cell, lr, batch_size, seq_len))
+        results_dir, '{}-{}-{}-{}-rank{}'.format(cell, lr, batch_size, seq_len, rank))
     os.makedirs(run_dir, exist_ok=True)
     # get ready to run
     twidth = shutil.get_terminal_size((80, 20)).columns
     print('^*^' * (twidth // 3))
-    print('{:*^{}}'.format('{}, lr: {}, bs: {}, sl: {}'.format(
-        cell, lr, batch_size, seq_len), twidth))
+    print('{:*^{}}'.format('{}, lr: {}, bs: {}, sl: {}, r: {}'.format(
+        cell, lr, batch_size, seq_len, rank), twidth))
     args = ['python',
             'jsb_test.py',
             '--width=50',
             '--num_layers=1',
             '--num_epochs=250',
+            '--rank=' + rank,
             '--cell=' + cell,
             '--learning_rate=' + lr,
             '--batch_size=' + batch_size,
