@@ -93,12 +93,13 @@ class CPGateCell(tf.nn.rnn_cell.RNNCell):
     """A forget gate and an accumulator"""
 
     def __init__(self, num_units, rank, dropout=1.0, layernorm='',
-                 weight_noise=0.0):
+                 weight_noise=0.0, separate_pad=True):
         self._num_units = num_units
         self._rank = rank
         self._dropout = dropout
         self.layernorm = layernorm
         self.weight_noise = weight_noise
+        self.separate_pad = separate_pad
 
     @property
     def rank(self):
@@ -116,7 +117,7 @@ class CPGateCell(tf.nn.rnn_cell.RNNCell):
         with tf.variable_scope(scope or type(self).__name__):
             with tf.variable_scope('accumulator',
                                    initializer=init.orthonormal_init(1.0)):
-                input_acts = _affine(inputs, self.state_size)
+                input_acts = _affine(inputs, self.state_size, name='input')
                 if 'pre' in self.layernorm and 'input' in self.layernorm:
                     input_acts = layer_normalise(input_acts)
                 update = tf.nn.relu(input_acts)
@@ -124,11 +125,12 @@ class CPGateCell(tf.nn.rnn_cell.RNNCell):
                     # update = tf.nn.dropout(update, self._dropout)
                     update = variational_wrapper(
                         update, keep_prob=self._dropout)
-
+                    
             with tf.variable_scope('forgetter',
                                    initializer=init.orthonormal_init(1.0)):
                 forget_acts = _tensor_logits(
-                    inputs, state, self.rank, pad=True, separate_pad=True,
+                    inputs, state, self.rank, pad=True,
+                    separate_pad=self.separate_pad,
                     weightnorm=None)
                 if 'pre' in self.layernorm and 'forget' in self.layernorm:
                     forget_acts = layer_normalise(forget_acts, add_bias=True,
