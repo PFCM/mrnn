@@ -182,10 +182,11 @@ def main(_):
                 step = global_step.eval()
                 bar.update(step, nll=batch_nll)
 
-                if np.isnan(batch_xent):
+                if np.isnan(batch_xent) or np.isinf(batch_nll):
                     print('~~found nans, quitting')
                     break
-            if np.isnan(batch_xent):
+                
+            if np.isnan(batch_xent) or np.isinf(batch_nll):
                 break
             if weight_noise != 0.0:
                 sess.run(weight_noise.assign(0.0))

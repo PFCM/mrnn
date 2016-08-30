@@ -207,7 +207,9 @@ def get_cell(input_size, hidden_size, var_dropout, weight_noise):
     elif FLAGS.cell == 'irnn':
         return mrnn.IRNNCell(hidden_size, input_size=input_size)
     elif FLAGS.cell == 'cp-gate':
-        return mrnn.CPGateCell(hidden_size, FLAGS.rank)
+        return mrnn.CPGateCell(hidden_size, FLAGS.rank, separate_pad=True)
+    elif FLAGS.cell == 'cp-gate-combined':
+        return mrnn.CPGateCell(hidden_size, FLAGS.rank, separate_pad=False)
     elif FLAGS.cell == 'gru':
         return tf.nn.rnn_cell.GRUCell(hidden_size)
     else:
