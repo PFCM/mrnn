@@ -52,6 +52,7 @@ flags.DEFINE_string('nonlinearity', 'tanh', 'nonlinearity to use. should be '
 flags.DEFINE_float('momentum', 0.99, 'momentum for the sgd')
 flags.DEFINE_string('rec_init', 'normal', 'wether to use normal or identity for recurrent mat')
 flags.DEFINE_string('cell', 'vanilla', 'cell to use')
+flags.DEFINE_integer('rank', 128, 'rank of tensor decomposition')
 
 FLAGS = flags.FLAGS
 
@@ -139,6 +140,10 @@ def inference(input_var, shape, vocab_size, num_steps,
         elif FLAGS.cell == 'simple_tt':
             print('tt')
             cells.append(mrnn.SimpleTTCell(layer, last_size, [50, 50], nonlin))
+        elif FLAGS.cell == 'cp-gate':
+            cells.append(mrnn.CPGateCell(layer, FLAGS.rank))
+        elif FLAGS.cell == 'cp-gate-combined':
+            cells.append(mrnn.CPGateCell(layer, FLAGS.rank, separate_pad=False))
         else:
             raise ValueError('unknown cell: {}'.format(FLAGS.cell))
         last_size = layer
@@ -207,9 +212,9 @@ def train(cost, learning_rate, max_grad_norm=100000.0):
                                       max_grad_norm)
     # opt = tf.train.AdadeltaOptimizer(learning_rate)
     # opt = tf.train.GradientDescentOptimizer(learning_rate)
-    opt = tf.train.MomentumOptimizer(learning_rate, FLAGS.momentum)
-    #opt = tf.train.AdamOptimizer(learning_rate, beta1=0.9,
-    #    beta2=0.95, epsilon=1e-6)
+    # opt = tf.train.MomentumOptimizer(learning_rate, FLAGS.momentum)
+    opt = tf.train.AdamOptimizer(learning_rate, beta1=0.9,
+                                 beta2=0.95, epsilon=1e-6)
     # opt = tf.train.RMSPropOptimizer(learning_rate, momentum=0.9)
     return opt.apply_gradients(zip(grads, tvars))
     # return opt.minimize(cost)
@@ -328,7 +333,8 @@ def main(_):
     # TODO (pfcm): use a global step tensor and save it too
     saver = tf.train.Saver(tf.trainable_variables(),
                            max_to_keep=3)
-    model_name = os.path.join(FLAGS.model_folder,
+    model_name = os.path.join(FLAGS.results_folder,
+                              FLAGS.model_folder,
                               FLAGS.model_prefix)
     model_name += '({})'.format(
         '-'.join([str(FLAGS.width)] * FLAGS.num_layers))
@@ -400,7 +406,7 @@ def main(_):
                 for line in samp.splitlines():
                     print('~~~~{}'.format(line))
                 sample_path = os.path.join(
-                    FLAGS.sample_folder, '{}.txt'.format(epoch+1))
+                    FLAGS.results_folder, FLAGS.sample_folder, '{}.txt'.format(epoch+1))
                 with open(sample_path, 'w') as f:
                     f.write(samp)
         # dropout is still 0 so let's go

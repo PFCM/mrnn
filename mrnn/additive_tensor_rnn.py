@@ -121,6 +121,7 @@ class CPGateCell(tf.nn.rnn_cell.RNNCell):
                 if 'pre' in self.layernorm and 'input' in self.layernorm:
                     input_acts = layer_normalise(input_acts)
                 update = tf.nn.relu(input_acts)
+                # update = tf.clip_by_value(input_acts*10, -1.0, 1.0)
                 if self._dropout != 1.0:
                     # update = tf.nn.dropout(update, self._dropout)
                     update = variational_wrapper(
@@ -136,8 +137,10 @@ class CPGateCell(tf.nn.rnn_cell.RNNCell):
                     forget_acts = layer_normalise(forget_acts, add_bias=True,
                                                   bias_initialiser=0.0)
                 forget_gate = tf.nn.sigmoid(forget_acts)
+                # forget_gate = tf.clip_by_value((forget_acts+1)/2, 0.0, 1.0)
 
             result = forget_gate * state + (1.0-forget_gate) * update
+
         return result, result
 
 
