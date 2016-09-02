@@ -28,6 +28,7 @@ flags.DEFINE_float('learning_rate', 0.001, 'the learning rate')
 flags.DEFINE_integer('num_steps', 100, 'how far to back propagate in time')
 flags.DEFINE_integer('batch_size', 100, 'how many batches')
 flags.DEFINE_integer('width', 256, 'how many units per layer')
+flags.DEFINE_integer('reset_every', 0, 'how often to reset the state')
 flags.DEFINE_integer('num_layers', 3, 'how many layers')
 flags.DEFINE_integer('num_epochs', 500, 'how many times through the data')
 flags.DEFINE_integer('num_chars', 1000000, 'how much of the data to use')
@@ -147,7 +148,7 @@ def inference(input_var, shape, vocab_size, num_steps,
         else:
             raise ValueError('unknown cell: {}'.format(FLAGS.cell))
         last_size = layer
-    if dropout != 1.0:  # != rather than < because could be tensor
+    if dropout != 1.0 and 'cp-gate' not in FLAGS.cell:  # != rather than < because could be tensor
         cells = [tf.nn.rnn_cell.DropoutWrapper(cell, input_keep_prob=dropout)
                  for cell in cells]
     cell = tf.nn.rnn_cell.MultiRNNCell(cells)
@@ -220,32 +221,40 @@ def train(cost, learning_rate, max_grad_norm=100000.0):
     # return opt.minimize(cost)
 
 
-def fill_feed(batch, input_var, target_var):
+def fill_feed(batch, input_var, target_var, state, init_state):
     """Fills the feed dict with a batch (including setting up targets)"""
     inputs = batch[:-1]
     targets = batch[1:]
     # this is dumb, should just fix up the datasets
     return {
         input_var: np.array(inputs).T,
-        target_var: np.array(targets).T
+        target_var: np.array(targets).T,
+        init_state: state
     }
 
 
 def run_epoch(sess, data_iter, initial_state, final_state, cost, train_op,
-              input_var, target_var, state_reset=0):
+              input_var, target_var, state_reset=FLAGS.reset_every):
     """Runs an epoch, pulling from data_iter until it is empty."""
-    if state_reset > 0 and not initial_state:
+    if state_reset > 0 and initial_state is None:
         raise ValueError("Can't reset the state without anything to reset it to")
     # get into it
     costs = 0
     steps = 0
+    state = tf.zeros_like(initial_state).eval(session=sess)
+    zero_state = state
     for progress, batch in data_iter:
-        batch_loss, _ = sess.run([cost, train_op],
-                                 feed_dict=fill_feed(batch,
-                                                     input_var,
-                                                     target_var))
+        batch_loss, _, state = sess.run(
+            [cost, train_op, final_state],
+            feed_dict=fill_feed(batch,
+                                input_var,
+                                target_var,
+                                state,
+                                initial_state))
         costs += batch_loss
         steps += 1
+        if state_reset != 0 and steps % state_reset == 0:
+            state = zero_state
         print('\r({:.3f}) -- xent: {:.4f}'.format(progress, costs/steps),
               end='')
     print()
@@ -310,10 +319,10 @@ def main(_):
     dropout = tf.get_variable('dropout', [], trainable=False)
 
     with tf.variable_scope('rnn_model') as scope:
-        full_outputs, final_state = inference(
+        full_outputs, final_state, init_state = inference(
             inputs, [FLAGS.width] * FLAGS.num_layers,
             len(vocab), FLAGS.num_steps, FLAGS.batch_size,
-            dropout=dropout)
+            dropout=dropout, return_initial_state=True)
         av_cost = loss(full_outputs, targets, len(vocab),
                        FLAGS.batch_size, FLAGS.num_steps)
         lr_var = tf.get_variable('learning_rate', [], trainable=False)
@@ -385,13 +394,13 @@ def main(_):
                 report_progress=True)
             # make sure the dropout is set
             sess.run(dropout.assign(FLAGS.dropout))
-            tloss = run_epoch(sess, train_iter, None, final_state, av_cost,
+            tloss = run_epoch(sess, train_iter, init_state, final_state, av_cost,
                               train_op, inputs, targets)
             print('~~~~Training xent: {}'.format(tloss))
             # ditch the dropout for validation purposes
             sess.run(dropout.assign(1))
-            vloss = run_epoch(sess, valid_iter, None, final_state, av_cost,
-                              tf.no_op(), inputs, targets)
+            vloss = run_epoch(sess, valid_iter, init_state, final_state, av_cost,
+                              tf.no_op(), inputs, targets, state_reset=0)
             print('~~~~Validation xent: {}'.format(vloss))
             # write the results of this epoch
             with open(tv_file, 'a') as rf:
@@ -413,12 +422,13 @@ def main(_):
         test_loss = run_epoch(
             sess,
             test_iter,
-            None,
+            init_state,
             final_state,
             av_cost,
             tf.no_op(),
             inputs,
-            targets)
+            targets,
+            state_reset=0)
         print('~'*30)
         print('{:~^30}'.format('Test loss: '))
         print('{:~^30}'.format(test_loss))
