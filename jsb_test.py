@@ -194,12 +194,13 @@ def main(_):
                 sess.run(sample_weights)
             valid_xent, valid_nll = test_model(valid)
 
-            print('Epoch {}'.format(epoch+1))
-            print('~~ valid xent: {}'.format(valid_xent))
-            print('~~ valid  nll: {}'.format(valid_nll))
+            if (epoch+1) % 10 == 0:
+                print('Epoch {}'.format(epoch+1))
+                print('~~ valid xent: {}'.format(valid_xent))
+                print('~~ valid  nll: {}'.format(valid_nll))
 
             if valid_nll < best_valid_nll:
-                print('~~ (new record)')
+                print('({})~ (new record: {:.4f})'.format(epoch+1, valid_nll))
                 best_model_path = saver.save(sess,
                                              os.path.join(FLAGS.results_dir,
                                                           FLAGS.cell + '.checkpoint'),
