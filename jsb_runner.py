@@ -44,6 +44,24 @@ def get_width(cell, rank, params=20000):
             quad += 4
             lin += 55*2
         result = np.round(np.max(np.roots(np.array([quad, lin, constant]))))
+    elif cell == 'simple_cp-combined':
+        # 55*hidden + rank*hidden + rank*(hidden+1) + rank*(55+1) + 55
+        # = 55*hidden + rank*hidden + rank*hidden + rank + rank*55 + rank + 55
+        # = 55*hidden + 2*rank*hidden + 57*rank + 55
+        quad, lin, constant = 0, 55, 55-params
+        if rank == 'one':
+            lin += 2
+            constant += 57
+        if rank == 'half':
+            quad += 1
+            lin += 57/2
+        if rank == 'full':
+            quad += 2
+            lin += 57
+        if rank == 'double':
+            quad += 4
+            lin += 57*2
+        result = np.round(np.max(np.roots(np.array([quad, lin, constant]))))
     elif cell == 'cp-gate':
         # 3*55*hidden + hidden*hidden + 2*rank*hidden + rank*55 + hidden + 55
         quad, lin, constant = 1, 3*55+1, 55-params
@@ -96,12 +114,13 @@ def get_rank(width, rank):
 _, results_dir, dataset = sys.argv
 
 cell_values = [
-    'vanilla',
-    'cp-gate',
-    'gru',
-    'lstm',
-    'simple_cp',
-    'cp-gate-combined']
+    #'vanilla',
+    #'cp-gate',
+    #'gru',
+    #'lstm',
+    #'simple_cp',
+    #'cp-gate-combined',
+    'simple_cp-combined']
 lr_values = ['0.1', '0.01', '0.001']
 batch_sizes = ['8']
 sequence_lengths = ['75', '100']

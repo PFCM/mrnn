@@ -173,7 +173,7 @@ def get_cell(input_size, hidden_size, var_dropout, weight_noise):
     elif FLAGS.cell == 'simple_cp':
         return mrnn.SimpleCPCell(hidden_size, input_size, FLAGS.rank,
                                  nonlinearity=tf.nn.tanh)
-    elif FLAGS.cell == 'simple_cp-alldecomp':
+    elif FLAGS.cell == 'simple_cp-combined':
         return mrnn.SimpleCPCell(hidden_size, input_size, FLAGS.rank,
                                  nonlinearity=tf.nn.tanh,
                                  separate_pad=False)
