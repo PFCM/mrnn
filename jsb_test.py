@@ -141,8 +141,14 @@ def main(_):
         loss_op = sigmoid_xent(all_outputs, targets)
         nll_op = negative_log_likelihood(all_outputs, targets)
 
+        regs = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
+        if regs:
+            reduceme = nll_op + tf.add_n(regs)
+        else:
+            reduceme = nll_op
+
         train_op, grad_norm = ptb_test.get_train_op(
-            nll_op, FLAGS.learning_rate, max_grad_norm=FLAGS.grad_clip,
+            reduceme, FLAGS.learning_rate, max_grad_norm=FLAGS.grad_clip,
             global_step=global_step)
     print('\r{:\\^60}'.format('got train ops'))
     print('{:/^60}'.format('{} params'.format(count_params())))
