@@ -128,7 +128,7 @@ class CPGateCell(tf.nn.rnn_cell.RNNCell):
                     # update = tf.nn.dropout(update, self._dropout)
                     update = variational_wrapper(
                         update, keep_prob=self._dropout)
-                    
+
             with tf.variable_scope('forgetter',
                                    initializer=init.orthonormal_init(1.0)):
                 forget_acts = _tensor_logits(

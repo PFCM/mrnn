@@ -1,6 +1,7 @@
 """Run a grid search over RNNs on JSB. Probably sequentially? Might be able
 to do a couple at once on one machine even, they're pretty lightweight."""
 import itertools
+import sys
 import os
 import time
 import shutil
@@ -12,7 +13,7 @@ import numpy as np
 def get_width(cell, rank, params=20000):
     """Gets the number of units with the closest number of parameters to
     `params` for a given type of cell.
-    
+
     Assumes inputs are size 55 and includes biases and the output layer
     """
     if cell == 'vanilla':
@@ -21,7 +22,7 @@ def get_width(cell, rank, params=20000):
         result = np.round(np.max(np.roots(np.array([1, 111, 55-params]))))
     elif cell == 'gru':
         # (55*hidden + hidden*hidden + hidden) * 3 + 55*hidden + 55
-        # 4*55*hidden + 3*hidden*hidden + 3*hidden + 55 
+        # 4*55*hidden + 3*hidden*hidden + 3*hidden + 55
         result = np.round(np.max(np.roots(np.array([3, 56*4+3, 55-params]))))
     elif cell == 'lstm':
         # (55*hidden + hidden*hidden +hidden) * 4 + 55*hidden + 55
@@ -42,6 +43,24 @@ def get_width(cell, rank, params=20000):
         if rank == 'double':
             quad += 4
             lin += 55*2
+        result = np.round(np.max(np.roots(np.array([quad, lin, constant]))))
+    elif cell == 'simple_cp-combined':
+        # 55*hidden + rank*hidden + rank*(hidden+1) + rank*(55+1) + 55
+        # = 55*hidden + rank*hidden + rank*hidden + rank + rank*55 + rank + 55
+        # = 55*hidden + 2*rank*hidden + 57*rank + 55
+        quad, lin, constant = 0, 55, 55-params
+        if rank == 'one':
+            lin += 2
+            constant += 57
+        if rank == 'half':
+            quad += 1
+            lin += 57/2
+        if rank == 'full':
+            quad += 2
+            lin += 57
+        if rank == 'double':
+            quad += 4
+            lin += 57*2
         result = np.round(np.max(np.roots(np.array([quad, lin, constant]))))
     elif cell == 'cp-gate':
         # 3*55*hidden + hidden*hidden + 2*rank*hidden + rank*55 + hidden + 55
@@ -92,15 +111,16 @@ def get_rank(width, rank):
         return width*2
 
 
-results_dir = 'jsb_gridsearch_fair'
+_, results_dir, dataset = sys.argv
 
 cell_values = [
-    'vanilla',
-    'cp-gate',
-    'gru',
-    'lstm',
-    'simple_cp',
-    'cp-gate-combined']
+    #'vanilla',
+    #'cp-gate',
+    #'gru',
+    #'lstm',
+    #'simple_cp',
+    #'cp-gate-combined',
+    'simple_cp-combined']
 lr_values = ['0.1', '0.01', '0.001']
 batch_sizes = ['8']
 sequence_lengths = ['75', '100']
@@ -133,7 +153,8 @@ for cell, lr, batch_size, seq_len, rank in grid_iter:
             '--learning_rate=' + lr,
             '--batch_size=' + batch_size,
             '--sequence_length=' + seq_len,
-            '--results_dir=' + run_dir]
+            '--results_dir=' + run_dir,
+            '--dataset=' + dataset]
     start = time.time()
     with subprocess.Popen(args, stdout=subprocess.PIPE, bufsize=1) as p:
         stdout = []

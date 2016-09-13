@@ -6,6 +6,7 @@ from __future__ import division
 from __future__ import print_function
 
 import tensorflow as tf
+import numpy as np
 
 import mrnn.init as init
 import mrnn.handy_ops as hops
@@ -79,7 +80,8 @@ class VRNNCell(tf.nn.rnn_cell.RNNCell):
                  b_init=tf.constant_initializer(0.0, dtype=tf.float32),
                  weight_noise=0.0,
                  keep_prob=1.0,
-                 weightnorm=False):
+                 weightnorm=False,
+                 orthreg=False):
         """
         Sets up a cell.
 
@@ -109,6 +111,7 @@ class VRNNCell(tf.nn.rnn_cell.RNNCell):
         self._weightnorm = weightnorm
         self._keep_prob = keep_prob
         self._weight_noise = weight_noise
+        self._orthreg = orthreg
 
     @property
     def input_size(self):
@@ -168,6 +171,15 @@ class VRNNCell(tf.nn.rnn_cell.RNNCell):
             if self._weightnorm == 'layer':
                 pre_activations = hops.layer_normalise(pre_activations)
             output = self._nonlinearity(pre_activations + bias)
+
+            if self._orthreg:
+                reg_loss = tf.reduce_sum(tf.squared_difference(
+                    tf.matmul(hidden_weights, hidden_weights, transpose_b=True),
+                    tf.constant(np.eye(self.state_size), dtype=tf.float32)))
+                reg_loss *= self._orthreg
+                tf.add_to_collection(tf.GraphKeys.REGULARIZATION_LOSSES,
+                                     reg_loss)
+            
         return output, output
 
 

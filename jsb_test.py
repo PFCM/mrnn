@@ -16,24 +16,27 @@ import progressbar
 
 import mrnn
 import mrnn.init as init
-import rnndatasets.jsbchorales as jsb
 
 import ptb_test  # may as well reuse
 
 
+tf.app.flags.DEFINE_string('dataset', 'jsb', 'which data. One of `jsb`, `nottingham`'
+                           ' `pianomidi` or `muse`')
+
 FLAGS = tf.app.flags.FLAGS
 
 
-def get_placeholders(batch_size, sequence_length):
+
+def get_placeholders(batch_size, sequence_length, num_features):
     """Make input and target placeholders"""
     inputs = tf.placeholder(tf.float32, name='all_inputs',
                             shape=[sequence_length,
                                    batch_size,
-                                   jsb.NUM_FEATURES])
+                                   num_features])
     targets = tf.placeholder(tf.float32, name='all_targets',
                              shape=[sequence_length,
                                     batch_size,
-                                    jsb.NUM_FEATURES])
+                                    num_features])
 
     return tf.unpack(inputs), tf.unpack(targets)
 
@@ -95,12 +98,25 @@ def count_params():
 def main(_):
     tf.set_random_seed(FLAGS.seed)
     # start by getting the data
-    print('...getting data', end='')
+    print('...getting data ({})'.format(FLAGS.dataset), end='')
+    if FLAGS.dataset == 'jsb':
+        import rnndatasets.midi.jsbchorales as jsb
+    elif FLAGS.dataset == 'nottingham':
+        import rnndatasets.midi.nottingham as jsb
+    elif FLAGS.dataset == 'pianomidi':
+        import rnndatasets.midi.pianomidi as jsb
+    elif FLAGS.dataset == 'muse':
+        import rnndatasets.midi.musedata as jsb
+    else:
+        raise ValueError("Don't know {}, either not done or won't be".format(
+            FLAGS.dataset))
+
     train, valid, test = jsb.get_data()
 
     inputs, targets = get_placeholders(FLAGS.batch_size,
-                                       FLAGS.sequence_length)
-    print('\r{:\\^60}'.format('got data'))
+                                       FLAGS.sequence_length,
+                                       jsb.NUM_FEATURES)
+    print('\r{:\\^60}'.format('got data ({})'.format(FLAGS.dataset)))
 
     print('...getting model', end='')
 
@@ -125,8 +141,14 @@ def main(_):
         loss_op = sigmoid_xent(all_outputs, targets)
         nll_op = negative_log_likelihood(all_outputs, targets)
 
+        regs = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
+        if regs:
+            reduceme = nll_op + tf.add_n(regs)
+        else:
+            reduceme = nll_op
+
         train_op, grad_norm = ptb_test.get_train_op(
-            nll_op, FLAGS.learning_rate, max_grad_norm=FLAGS.grad_clip,
+            reduceme, FLAGS.learning_rate, max_grad_norm=FLAGS.grad_clip,
             global_step=global_step)
     print('\r{:\\^60}'.format('got train ops'))
     print('{:/^60}'.format('{} params'.format(count_params())))
@@ -185,7 +207,7 @@ def main(_):
                 if np.isnan(batch_xent) or np.isinf(batch_nll):
                     print('~~found nans, quitting')
                     break
-                
+
             if np.isnan(batch_xent) or np.isinf(batch_nll):
                 break
             if weight_noise != 0.0:
