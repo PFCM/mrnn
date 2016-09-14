@@ -53,4 +53,4 @@ for cell, lr, rank in grid_iter:
         fp.write(''.join(stdout))
     print('\n\n')
     print('<*>><'*20)
-    print('({}s)'.format(end=start))
+    print('({}s)'.format(end-start))
