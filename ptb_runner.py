@@ -47,7 +47,7 @@ for cell, lr, rank in grid_iter:
         stdout = []
         for line in p.stdout:
             print(line.decode(), end='', flush=True)
-            stdout.append(line.decode)
+            stdout.append(line.decode())
     end = time.time()
     with open(os.path.join(results_dir, 'stdout.txt'), 'w') as fp:
         fp.write(''.join(stdout))
