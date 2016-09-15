@@ -145,10 +145,9 @@ def inference(input_var, shape, vocab_size, num_steps,
             print('tt')
             cells.append(mrnn.SimpleTTCell(layer, last_size, [50, 50], nonlin))
         elif FLAGS.cell == 'cp-gate':
-            cells.append(mrnn.CPGateCell(layer, FLAGS.rank))
+            cells.append(mrnn.CPGateCell(layer, FLAGS.rank,
+                                         candidate_nonlin=nonlin))
         elif FLAGS.cell == 'cp-gate-combined':
-            cells.append(mrnn.CPGateCell(layer, FLAGS.rank, separate_pad=False))
-        elif FLAGS.cell == 'cp-gate-combined-linear':
             cells.append(mrnn.CPGateCell(layer, FLAGS.rank, separate_pad=False,
                                          candidate_nonlin=nonlin))
         else:
@@ -346,8 +345,7 @@ def main(_):
     # TODO (pfcm): use a global step tensor and save it too
     saver = tf.train.Saver(tf.trainable_variables(),
                            max_to_keep=3)
-    model_name = os.path.join(FLAGS.results_folder,
-                              FLAGS.model_folder,
+    model_name = os.path.join(FLAGS.model_folder,
                               FLAGS.model_prefix)
     model_name += '({})'.format(
         '-'.join([str(FLAGS.width)] * FLAGS.num_layers))
@@ -419,7 +417,7 @@ def main(_):
                 for line in samp.splitlines():
                     print('~~~~{}'.format(line))
                 sample_path = os.path.join(
-                    FLAGS.results_folder, FLAGS.sample_folder, '{}.txt'.format(epoch+1))
+                    FLAGS.sample_folder, '{}.txt'.format(epoch+1))
                 with open(sample_path, 'w') as f:
                     f.write(samp)
         # dropout is still 0 so let's go
