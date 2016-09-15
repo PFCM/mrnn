@@ -82,10 +82,10 @@ def inference(input_var, shape, vocab_size, num_steps,
             and state is the final state of the rnn.
     """
     # first thing we need is some kind of embedding maybe
-    with tf.device('/cpu:0'):
-        embedding = tf.get_variable('embedding', [vocab_size, 16])
-        inputs = tf.nn.embedding_lookup(embedding, input_var)
-    # inputs = tf.one_hot(input_var, vocab_size)
+    # with tf.device('/cpu:0'):
+    #    embedding = tf.get_variable('embedding', [vocab_size, 8])
+    #    inputs = tf.nn.embedding_lookup(embedding, input_var)
+    inputs = tf.one_hot(input_var, vocab_size)
     if dropout != 1.0:
         inputs = tf.nn.dropout(inputs, dropout)
     # set up the cells
@@ -217,7 +217,8 @@ def train(cost, learning_rate, max_grad_norm=100000.0):
     """Gets the training op"""
     tvars = tf.trainable_variables()
 
-    opt = tf.train.AdamOptimizer(learning_rate)
+    # opt = tf.train.AdamOptimizer(learning_rate)
+    opt = tf.train.RMSPropOptimizer(learning_rate)
     g_and_v = opt.compute_gradients(cost, tvars)
     if max_grad_norm < 100000:
         grads, _ = tf.clip_by_global_norm([grad for grad, var in g_and_v],
