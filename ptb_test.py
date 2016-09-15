@@ -30,7 +30,7 @@ flags.DEFINE_bool('layer_norm', False, 'Whether to use layer normalisation.')
 flags.DEFINE_float('learning_rate', 0.01, 'base learning rate for ADAM')
 flags.DEFINE_integer('batch_size', 20, 'minibatch size')
 flags.DEFINE_integer('sequence_length', 35, 'how far we unroll BPTT')
-flags.DEFINE_float('grad_clip', 10000.0, 'where to clip the gradients')
+flags.DEFINE_float('grad_clip', None, 'where to clip the gradients')
 # flags.DEFINE_integer('start_decay', 6, 'when to start the learning rate decay')
 # flags.DEFINE_float('decay_factor', 1.2, 'how much to divide the learning rate'
 #                    'by each epoch after start_decay')
@@ -84,14 +84,17 @@ def run_epoch(sess, data_iter, initial_state, final_state,
         final_states = [final_state]
 
     except AttributeError:
-        # in fact, if it is a tuple it will always be a tuple of tuples
-        init_state_vars = [svar
-                           for cell_states in initial_state
-                           for svar in cell_states]
+        if FLAGS.layers > 1:
+            init_state_vars = [svar
+                               for cell_states in initial_state
+                               for svar in cell_states]
+            final_states = [svar
+                            for cell_states in final_state
+                            for svar in cell_states]
+        else:
+            init_state_vars = [svar for svar in initial_state]
+            final_states = [svar for svar in final_state]
         states = [svar.eval(session=sess) for svar in init_state_vars]
-        final_states = [svar
-                        for cell_states in final_state
-                        for svar in cell_states]
     for batch in data_iter:
 
         start = time.time()
@@ -187,7 +190,7 @@ def get_cell(input_size, hidden_size, var_dropout, weight_noise):
     elif FLAGS.cell == 'cp-res':
         return mrnn.CPResCell(hidden_size, input_size, FLAGS.rank)
     elif FLAGS.cell == 'lstm':
-        return tf.nn.rnn_cell.BasicLSTMCell(hidden_size, input_size=input_size,
+        return tf.nn.rnn_cell.BasicLSTMCell(hidden_size,
                                             state_is_tuple=True)
     elif FLAGS.cell == 'vanilla':
         return mrnn.VRNNCell(hidden_size, input_size=input_size,
@@ -207,9 +210,17 @@ def get_cell(input_size, hidden_size, var_dropout, weight_noise):
     elif FLAGS.cell == 'irnn':
         return mrnn.IRNNCell(hidden_size, input_size=input_size)
     elif FLAGS.cell == 'cp-gate':
-        return mrnn.CPGateCell(hidden_size, FLAGS.rank, separate_pad=True)
+        return mrnn.CPGateCell(hidden_size, FLAGS.rank, separate_pad=True,
+                               candidate_nonlin=tf.nn.relu)
     elif FLAGS.cell == 'cp-gate-combined':
-        return mrnn.CPGateCell(hidden_size, FLAGS.rank, separate_pad=False)
+        return mrnn.CPGateCell(hidden_size, FLAGS.rank, separate_pad=False,
+                               candidate_nonlin=tf.nn.relu)
+    elif FLAGS.cell == 'cp-gate-linear':
+        return mrnn.CPGateCell(hidden_size, FLAGS.rank, separate_pad=True,
+                               candidate_nonlin=tf.identity)
+    elif FLAGS.cell == 'cp-gate-combined-linear':
+        return mrnn.CPGateCell(hidden_size, FLAGS.rank, separate_pad=False,
+                               candidate_nonlin=tf.identity)
     elif FLAGS.cell == 'gru':
         return tf.nn.rnn_cell.GRUCell(hidden_size)
     else:
@@ -297,7 +308,7 @@ def loss(logits, targets):
     return tf.reduce_mean(cost)
 
 
-def get_train_op(cost, learning_rate, max_grad_norm=1000.0, global_step=None):
+def get_train_op(cost, learning_rate, max_grad_norm=None, global_step=None):
     """gets a training op (ADAM)"""
     opt = tf.train.AdamOptimizer(learning_rate, epsilon=FLAGS.epsilon)
     # opt = tf.train.GradientDescentOptimizer(learning_rate)
@@ -306,13 +317,17 @@ def get_train_op(cost, learning_rate, max_grad_norm=1000.0, global_step=None):
     if reg_losses:
         cost += tf.add_n(reg_losses)
     grads_and_vars = opt.compute_gradients(cost)
-    grads, norm = tf.clip_by_global_norm([grad
-                                          for grad, var in grads_and_vars],
-                                         max_grad_norm)
-    t_op = opt.apply_gradients(
-        [(grad, var) for grad, (_, var)
-         in zip(grads, grads_and_vars)],
-        global_step=global_step)
+    if max_grad_norm:
+        grads, norm = tf.clip_by_global_norm([grad
+                                              for grad, var in grads_and_vars],
+                                             max_grad_norm)
+        t_op = opt.apply_gradients(
+            [(grad, var) for grad, (_, var)
+             in zip(grads, grads_and_vars)],
+            global_step=global_step)
+    else:
+        norm = tf.global_norm([grad for grad, var in grads_and_vars])
+        t_op = opt.apply_gradients(grads_and_vars, global_step=global_step)
     return t_op, norm
 
 

@@ -93,7 +93,8 @@ class CPGateCell(tf.nn.rnn_cell.RNNCell):
     """A forget gate and an accumulator"""
 
     def __init__(self, num_units, rank, dropout=1.0, layernorm='',
-                 weight_noise=0.0, separate_pad=True, candidate_nonlin=tf.nn.tanh):
+                 weight_noise=0.0, separate_pad=True,
+                 candidate_nonlin=tf.nn.relu):
         self._num_units = num_units
         self._rank = rank
         self._dropout = dropout
@@ -119,15 +120,19 @@ class CPGateCell(tf.nn.rnn_cell.RNNCell):
             with tf.variable_scope('accumulator',
                                    initializer=init.orthonormal_init(1.0)):
                 input_acts = _affine(inputs, self.state_size, name='input')
+                hh_weights = tf.get_variable('hh', [self.state_size,
+                                                    self.state_size])
                 if 'pre' in self.layernorm and 'input' in self.layernorm:
                     input_acts = layer_normalise(input_acts)
                 update = self.candidate_nonlin(input_acts)
+
+                # update = _tensor_logits(update, state, self.rank)
                 # update = tf.clip_by_value(input_acts*10, -1.0, 1.0)
                 if self._dropout != 1.0:
                     # update = tf.nn.dropout(update, self._dropout)
                     update = variational_wrapper(
                         update, keep_prob=self._dropout)
-                    
+
             with tf.variable_scope('forgetter',
                                    initializer=init.orthonormal_init(1.0)):
                 forget_acts = _tensor_logits(
