@@ -81,8 +81,11 @@ def inference(input_var, shape, vocab_size, num_steps,
     """
     # first thing we need is some kind of embedding maybe
     with tf.device('/cpu:0'):
-        embedding = tf.get_variable('embedding', [vocab_size, shape[0]])
+        embedding = tf.get_variable('embedding', [vocab_size, 16])
         inputs = tf.nn.embedding_lookup(embedding, input_var)
+    # inputs = tf.one_hot(input_var, vocab_size)
+    if dropout != 1.0:
+        inputs = tf.nn.dropout(inputs, dropout)
     # set up the cells
     last_size = shape[0]
     cells = []
@@ -145,6 +148,9 @@ def inference(input_var, shape, vocab_size, num_steps,
             cells.append(mrnn.CPGateCell(layer, FLAGS.rank))
         elif FLAGS.cell == 'cp-gate-combined':
             cells.append(mrnn.CPGateCell(layer, FLAGS.rank, separate_pad=False))
+        elif FLAGS.cell == 'cp-gate-combined-linear':
+            cells.append(mrnn.CPGateCell(layer, FLAGS.rank, separate_pad=False,
+                                         candidate_nonlin=nonlin))
         else:
             raise ValueError('unknown cell: {}'.format(FLAGS.cell))
         last_size = layer
