@@ -215,16 +215,14 @@ def output_probs(logits):
 def train(cost, learning_rate, max_grad_norm=100000.0):
     """Gets the training op"""
     tvars = tf.trainable_variables()
-    grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars),
-                                      max_grad_norm)
-    # opt = tf.train.AdadeltaOptimizer(learning_rate)
-    # opt = tf.train.GradientDescentOptimizer(learning_rate)
-    # opt = tf.train.MomentumOptimizer(learning_rate, FLAGS.momentum)
-    opt = tf.train.AdamOptimizer(learning_rate, beta1=0.9,
-                                 beta2=0.95, epsilon=1e-6)
-    # opt = tf.train.RMSPropOptimizer(learning_rate, momentum=0.9)
-    return opt.apply_gradients(zip(grads, tvars))
-    # return opt.minimize(cost)
+
+    opt = tf.train.AdamOptimizer(learning_rate)
+    g_and_v = opt.compute_gradients(cost, tvars)
+    if max_grad_norm < 100000:
+        grads, _ = tf.clip_by_global_norm([grad for grad, var in g_and_v],
+                                          max_grad_norm)
+        g_and_v = zip(grads, [var for grad, var in g_and_v])
+    return opt.apply_gradients(g_and_v)
 
 
 def fill_feed(batch, input_var, target_var, state, init_state):
