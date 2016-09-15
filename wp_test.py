@@ -23,7 +23,8 @@ flags.DEFINE_string('sample_strategy', 'random', 'how to generate samples'
                                                  'one of `random`, `ml` or'
                                                  '`beam`. Beam search is not '
                                                  'implemented.')
-flags.DEFINE_string('sample_seed', '"', 'a string to start of the rnn when sampling')
+flags.DEFINE_string('sample_seed', '"',
+                    'a string to start of the rnn when sampling')
 flags.DEFINE_float('learning_rate', 0.001, 'the learning rate')
 flags.DEFINE_integer('num_steps', 100, 'how far to back propagate in time')
 flags.DEFINE_integer('batch_size', 100, 'how many batches')
@@ -51,7 +52,8 @@ flags.DEFINE_string('weightnorm', 'none', 'how to normalise weights')
 flags.DEFINE_string('nonlinearity', 'tanh', 'nonlinearity to use. should be '
                                             '"tanh" or "relu"')
 flags.DEFINE_float('momentum', 0.99, 'momentum for the sgd')
-flags.DEFINE_string('rec_init', 'normal', 'wether to use normal or identity for recurrent mat')
+flags.DEFINE_string('rec_init', 'normal',
+                    'wether to use normal or identity for recurrent mat')
 flags.DEFINE_string('cell', 'vanilla', 'cell to use')
 flags.DEFINE_integer('rank', 128, 'rank of tensor decomposition')
 
@@ -345,7 +347,7 @@ def main(_):
     # set up a saver to save the model
     # TODO (pfcm): use a global step tensor and save it too
     saver = tf.train.Saver(tf.trainable_variables(),
-                           max_to_keep=3)
+                           max_to_keep=1)
     model_name = os.path.join(FLAGS.results_folder,
                               FLAGS.model_folder,
                               FLAGS.model_prefix)
@@ -379,6 +381,8 @@ def main(_):
         test_file = 'test.csv'
         print('~~~~(saving losses in {})'.format(tv_file))
         print('~~~~(saving models in {})'.format(FLAGS.model_folder))
+        best_valid_loss = 1000
+        best_model_path = None
         for epoch in range(FLAGS.num_epochs):
             print('~~Epoch: {}'.format(epoch+1))
             # assign the learning rate
@@ -395,7 +399,8 @@ def main(_):
             train_iter, valid_iter, test_iter = data.get_split_iters(
                 FLAGS.num_steps+1,
                 FLAGS.batch_size,
-                report_progress=True)
+                report_progress=True,
+                overlap=0)
             # make sure the dropout is set
             sess.run(dropout.assign(FLAGS.dropout))
             tloss = run_epoch(sess, train_iter, init_state, final_state, av_cost,
@@ -406,11 +411,15 @@ def main(_):
             vloss = run_epoch(sess, valid_iter, init_state, final_state, av_cost,
                               tf.no_op(), inputs, targets, state_reset=0)
             print('~~~~Validation xent: {}'.format(vloss))
+            if vloss < best_valid_loss:
+                print('~~~~(new record)~~~~')
+                best_valid_loss = vloss
+                best_model_path = saver.save(
+                    sess, model_name, global_step=epoch+1)
             # write the results of this epoch
             with open(tv_file, 'a') as rf:
                 rf.write('{},{},{}\n'.format(epoch, tloss, vloss))
             if (epoch+1) % 10 == 0:
-                saver.save(sess, model_name, global_step=epoch+1)
                 samp = gen_sample(vocab,
                                   char_probs,
                                   inputs_1,
@@ -423,6 +432,9 @@ def main(_):
                 with open(sample_path, 'w') as f:
                     f.write(samp)
         # dropout is still 0 so let's go
+        print('~'*30)
+        print('Loading {}'.format(best_model_path))
+        saver.restore(sess, best_model_path)
         test_loss = run_epoch(
             sess,
             test_iter,
