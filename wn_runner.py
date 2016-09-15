@@ -14,6 +14,7 @@ nonlinearity_values = ['relu', 'linear']
 ranks = ['1', '8', '32', '128', '256']
 lr_vals = ['0.001']
 cells = ['cp-gate-combined', 'cp-gate']
+dropout = ['0.5', '0.8', '0.9']
 
 program_args = [
     'python',

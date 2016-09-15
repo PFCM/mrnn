@@ -399,7 +399,7 @@ def main(_):
                 FLAGS.num_steps+1,
                 FLAGS.batch_size,
                 report_progress=True,
-                overlap=0)
+                overlap=1)
             # make sure the dropout is set
             sess.run(dropout.assign(FLAGS.dropout))
             tloss = run_epoch(sess, train_iter, init_state, final_state, av_cost,
@@ -414,7 +414,8 @@ def main(_):
                 print('~~~~(new record)~~~~')
                 best_valid_loss = vloss
                 best_model_path = saver.save(
-                    sess, model_name, global_step=epoch+1)
+                    sess, model_name, global_step=epoch+1,
+                    write_meta_graph=False)
             # write the results of this epoch
             with open(tv_file, 'a') as rf:
                 rf.write('{},{},{}\n'.format(epoch, tloss, vloss))
