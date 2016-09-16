@@ -61,7 +61,8 @@ FLAGS = flags.FLAGS
 
 
 def inference(input_var, shape, vocab_size, num_steps,
-              batch_size, return_initial_state=False, dropout=1.0):
+              batch_size, return_initial_state=False, dropout=1.0,
+              embedding_size=32):
     """Makes the model up to logits.
 
     Args:
@@ -82,14 +83,14 @@ def inference(input_var, shape, vocab_size, num_steps,
             and state is the final state of the rnn.
     """
     # first thing we need is some kind of embedding maybe
-    # with tf.device('/cpu:0'):
-    #    embedding = tf.get_variable('embedding', [vocab_size, 8])
-    #    inputs = tf.nn.embedding_lookup(embedding, input_var)
-    inputs = tf.one_hot(input_var, vocab_size)
-    if dropout != 1.0:
-        inputs = tf.nn.dropout(inputs, dropout)
+    with tf.device('/cpu:0'):
+       embedding = tf.get_variable('embedding', [vocab_size, embedding_size])
+       inputs = tf.nn.embedding_lookup(embedding, input_var)
+    # inputs = tf.one_hot(input_var, vocab_size)
+    #if dropout != 1.0:
+    #   inputs = tf.nn.dropout(inputs, dropout)
     # set up the cells
-    last_size = shape[0]
+    last_size = embedding_size
     cells = []
     # print('  weightnorm: {}'.format(FLAGS.weightnorm))
     # print('      nonlin: {}'.format(FLAGS.nonlinearity))
@@ -142,7 +143,7 @@ def inference(input_var, shape, vocab_size, num_steps,
             print('cp factored')
             cells.append(mrnn.SimpleCPCell(layer, last_size, layer, nonlin, True))
         elif FLAGS.cell == 'lstm':
-            cells.append(tf.nn.rnn_cell.LSTMCell(layer, forget_bias=1.0))
+            cells.append(tf.nn.rnn_cell.LSTMCell(layer, forget_bias=5.0))
         elif FLAGS.cell == 'simple_tt':
             print('tt')
             cells.append(mrnn.SimpleTTCell(layer, last_size, [50, 50], nonlin))
@@ -152,16 +153,22 @@ def inference(input_var, shape, vocab_size, num_steps,
         elif FLAGS.cell == 'cp-gate-combined':
             cells.append(mrnn.CPGateCell(layer, FLAGS.rank, separate_pad=False,
                                          candidate_nonlin=nonlin))
+        elif FLAGS.cell == 'gru':
+            cells.append(tf.nn.rnn_cell.GRUCell(layer))
+        elif FLAGS.cell == 'tf-vanilla':
+            cells.append(tf.nn.rnn_cell.BasicRNNCell(layer))
         else:
             raise ValueError('unknown cell: {}'.format(FLAGS.cell))
         last_size = layer
     if dropout != 1.0 and 'cp-gate' not in FLAGS.cell:  # != rather than < because could be tensor
         cells = [tf.nn.rnn_cell.DropoutWrapper(cell, input_keep_prob=dropout)
                  for cell in cells]
-    cell = tf.nn.rnn_cell.MultiRNNCell(cells)
+    if len(cells) > 1:
+        cell = tf.nn.rnn_cell.MultiRNNCell(cells)
+    else:
+        cell = cells[0]
     # make sure the inputs are an approprite list
-    inputs = [tf.squeeze(input_, [1])
-              for input_ in tf.split(1, num_steps, inputs)]
+    inputs = tf.unpack(inputs, axis=1)
     # if we need to return the initial state
     if return_initial_state:
         init_state = cell.zero_state(batch_size, tf.float32)
@@ -176,6 +183,7 @@ def inference(input_var, shape, vocab_size, num_steps,
     softmax_w = tf.get_variable("softmax_w", [last_size, vocab_size])
     softmax_b = tf.get_variable("softmax_b", [vocab_size])
     logits = tf.matmul(outputs, softmax_w) + softmax_b
+    
     if return_initial_state:
         return logits, state, init_state
     return logits, state
@@ -192,11 +200,9 @@ def loss(logits, targets, vocab_size, batch_size, num_steps):
     Returns:
         scalar tensor representing the average cross entropy.
     """
-    # first we have to softmax it
-    cost = tf.nn.seq2seq.sequence_loss_by_example(
-        [logits],
-        [tf.reshape(targets, [-1])],
-        [tf.ones([batch_size * num_steps])])
+    # print(logits.get_shape(), targets.get_shape())
+    cost = tf.nn.sparse_softmax_cross_entropy_with_logits(
+        logits, tf.reshape(targets, [-1]))
     cost = tf.reduce_mean(cost)
     return cost
 
@@ -217,8 +223,8 @@ def train(cost, learning_rate, max_grad_norm=100000.0):
     """Gets the training op"""
     tvars = tf.trainable_variables()
 
-    # opt = tf.train.AdamOptimizer(learning_rate)
-    opt = tf.train.RMSPropOptimizer(learning_rate)
+    opt = tf.train.AdamOptimizer(learning_rate)
+    # opt = tf.train.RMSPropOptimizer(learning_rate)
     g_and_v = opt.compute_gradients(cost, tvars)
     if max_grad_norm < 100000:
         grads, _ = tf.clip_by_global_norm([grad for grad, var in g_and_v],
@@ -324,7 +330,8 @@ def main(_):
 
     dropout = tf.get_variable('dropout', [], trainable=False)
 
-    with tf.variable_scope('rnn_model') as scope:
+    with tf.variable_scope('rnn_model',
+                           initializer=tf.random_uniform_initializer(-0.08, 0.08)) as scope:
         full_outputs, final_state, init_state = inference(
             inputs, [FLAGS.width] * FLAGS.num_layers,
             len(vocab), FLAGS.num_steps, FLAGS.batch_size,
@@ -348,8 +355,7 @@ def main(_):
     # TODO (pfcm): use a global step tensor and save it too
     saver = tf.train.Saver(tf.trainable_variables(),
                            max_to_keep=1)
-    model_name = os.path.join(FLAGS.results_folder,
-                              FLAGS.model_folder,
+    model_name = os.path.join(FLAGS.model_folder,
                               FLAGS.model_prefix)
     model_name += '({})'.format(
         '-'.join([str(FLAGS.width)] * FLAGS.num_layers))

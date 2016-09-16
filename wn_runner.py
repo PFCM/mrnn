@@ -5,28 +5,27 @@ import time
 import shutil
 import subprocess
 # test comment
-data_dir = 'wp_grid'
+data_dir = '/local/scratch/pfcm/wp'
 
 weightnorm_values = []#'full', 'input', 'recurrent', 'none',
                      #'flat-norm']
-nonlinearity_values = ['relu', 'linear']
+nonlinearity_values = ['linear', 'relu']
 #inits = ['normal', 'identity']
 ranks = ['1', '8', '32', '128', '256']
-lr_vals = ['0.001']
-cells = ['cp-gate-combined', 'cp-gate']
-dropout = ['0.5', '0.8', '0.9']
+lr_vals = ['0.002']
+cells = ['cp-gate-combined', 'cp-gate', 'gru', 'lstm', 'tf-vanilla']
 
 program_args = [
     'python',
     'wp_test.py',
     '--width=128',
     '--num_layers=1',
-    '--batch_size=64',
+    '--batch_size=100',
     '--learning_rate_decay=0.95',
     '--start_decay=10000',
+    '--dropout=0.6',
     '--momentum=0.95',
     '--num_epochs=50',
-    '--dropout=0.75',
     '--model_prefix=rnn'  # they all get separate folders so it doesn't matter
 ]
 
@@ -34,6 +33,8 @@ grid_iter = itertools.product(cells, nonlinearity_values,
                               ranks, lr_vals)
 
 for cell, nonlin, rank, lr in grid_iter:
+    if 'cp' not in cell and (rank != ranks[0] or nonlin != nonlinearity_values[0]):
+        continue
     run_dir = os.path.join(
         data_dir, '{}-{}'.format(cell, nonlin))
     run_dir = os.path.join(
