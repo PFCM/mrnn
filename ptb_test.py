@@ -405,7 +405,7 @@ def main(_):
     lr = FLAGS.learning_rate
 
     saver = tf.train.Saver(tf.trainable_variables(),
-                           max_to_keep=3)
+                           max_to_keep=1)
     model_dir = os.path.join(FLAGS.results_dir,
                              'models')
     model_name = os.path.join(model_dir,
@@ -477,6 +477,8 @@ def main(_):
                               write_meta_graph=False)
             if valid_loss < best_valid_loss:
                 print('{:~^60}'.format('new record'))
+                # delete the old best model
+                os.remove(best_model_path)
                 best_model_path = shutil.copy(path, best_model_dir)
                 best_valid_loss = valid_loss
             else:
