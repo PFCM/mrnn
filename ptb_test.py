@@ -478,7 +478,8 @@ def main(_):
             if valid_loss < best_valid_loss:
                 print('{:~^60}'.format('new record'))
                 # delete the old best model
-                os.remove(best_model_path)
+                if best_model_path is not None:
+                    os.remove(best_model_path)
                 best_model_path = shutil.copy(path, best_model_dir)
                 best_valid_loss = valid_loss
             else:
