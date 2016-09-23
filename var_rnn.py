@@ -38,7 +38,7 @@ class VarRNN(tf.nn.rnn_cell.RNNCell):
             #mean = tf.nn.tanh(mean)
             #std = tf.nn.softplus(std)
             
-            noise = tf.random_normal([self.state_size])
+            noise = tf.random_normal([self.state_size], stddev=0.1)
             if self._noise != 0.0:
                 noise *= self._noise
             output = mean + std * noise
