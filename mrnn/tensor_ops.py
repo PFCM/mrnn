@@ -51,9 +51,9 @@ def get_sparse_subset_tensor(shape, subset_sizes,
     with tf.name_scope(name):
         # now we need to make some random indices
         # potentially kinda gross for a little while
-        a_idcs = tf.pack([tf.random_shuffle(tf.range(shape[0]))
+        a_idcs = tf.stack([tf.random_shuffle(tf.range(shape[0]))
                           for _ in range(shape[1])])
-        b_idcs = tf.pack([tf.random_shuffle(tf.range(shape[2]))
+        b_idcs = tf.stack([tf.random_shuffle(tf.range(shape[2]))
                           for _ in range(shape[1])])
         # if we eval these they will be random every time
         # so we use them as the initialiser to a new variable
@@ -122,7 +122,7 @@ def random_sparse_tensor(shape, sparsity, stddev=0.15, name='random-sparse'):
         logger.info('(amounts to %d elements)', num_elements)
     # the first thing we need are random indices
     # it's a bit hard to do this without the possibility of repeats
-    idces = tf.pack([tf.cast(
+    idces = tf.stack([tf.cast(
         tf.get_variable(name+'_idcs{}'.format(i),
                         shape=[num_elements],
                         initializer=tf.random_uniform_initializer(
@@ -175,7 +175,7 @@ def bilinear_product_sparse(vec_a, tensor, vec_b, output_size,
     # and we squeeze the result so it should be back to 2D [B x J]
     # print(temp.get_shape())
     # print(tf.expand_dims(vec_b, 2).get_shape())
-    return tf.squeeze(tf.batch_matmul(temp, tf.expand_dims(vec_b, 2)), [2])
+    return tf.squeeze(tf.matmul(temp, tf.expand_dims(vec_b, 2)), [2])
 
 
 def get_cp_tensor(shape, maxrank, name, weightnorm=False, dtype=tf.float32,
@@ -283,10 +283,10 @@ def bilinear_product_cp(vec_a, tensor, vec_b, batch_major=True,
         prod_a = tf.matmul(tensor[0], vec_a, transpose_b=batch_major)
         prod_c = tf.matmul(tensor[2], vec_b, transpose_b=batch_major)
         # now do these two elementwise
-        prod_b = tf.mul(prod_a, prod_c)
+        prod_b = tf.multiply(prod_a, prod_c)
         # if there are scales in the tensor, here is when to apply them
         if len(tensor) == 4:
-            prod_b = tf.mul(tensor[3], prod_b)
+            prod_b = tf.multiply(tensor[3], prod_b)
         # and multiply the result by the remaining matrix in tensor
         result = tf.matmul(tensor[1], prod_b, transpose_a=True)
         if batch_major:
@@ -362,7 +362,7 @@ def bilinear_product_tt_3(input_a, tensor, input_b, name='bilinear_tt3',
         x_A = tf.expand_dims(x_A, 2)
         y_C = tf.expand_dims(y_C, 1)
         # do the outer products and then flatten
-        outer = tf.reshape(tf.batch_matmul(x_A, y_C),
+        outer = tf.reshape(tf.matmul(x_A, y_C),
                            [-1, #x_A.get_shape()[0].value,
                             r_1 * r_2])
         # now we can do the bilinear product across the whole batch as a single

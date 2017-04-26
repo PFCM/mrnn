@@ -9,7 +9,7 @@ import numpy as np
 import tensorflow as tf
 
 
-class MRNNCell(tf.nn.rnn_cell.RNNCell):
+class MRNNCell(tf.contrib.rnn.RNNCell):
     """Simple RNN but with a multiplicative rather than additive
     connection.
     """

@@ -20,7 +20,7 @@ def basiclstm_state_combiner(normalised):
     return normalised[1], tf.nn.rnn_cell.LSTMStateTuple(*normalised)
 
 
-class LayerNormWrapper(tf.nn.rnn_cell.RNNCell):
+class LayerNormWrapper(tf.contrib.rnn.RNNCell):
     """Does layer normalisation to a cell. Optionally does it to the states
     instead (or more likely, both)"""
 
@@ -69,8 +69,8 @@ class LayerNormWrapper(tf.nn.rnn_cell.RNNCell):
                 to_norm = {'output': output}
             else:
                 to_norm = self._state_splitter(output, states)
-                
-            normed = [hops.layer_normalise(to_norm[name], name=name) 
+
+            normed = [hops.layer_normalise(to_norm[name], name=name)
                       for name in to_norm]
         if self._separate_states:
             return self._state_combiner(normed)

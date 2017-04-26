@@ -144,7 +144,7 @@ def get_weightnormed_matrix(shape, axis=1, name='weightnorm',
             gains = 1.0
         sqr_norms = tf.reduce_sum(
                 tf.square(unnormed_w),
-                reduction_indices=axis,
+                axis=axis,
                 keep_dims=True)
 
         if not squared:
@@ -179,13 +179,13 @@ def layer_normalise(activations, gain_initialiser=1.0, bias_initialiser=0.0,
     with tf.variable_scope(name):
         # first we need to compute the statistics
         # this is done per example
-        mu = tf.reduce_mean(activations, reduction_indices=1,
+        mu = tf.reduce_mean(activations, axis=1,
                             keep_dims=True)  # [batch_size, 1]
         # now center
         centered = activations - mu  # need this to broadcast
 
         sigma = tf.reduce_mean(tf.square(centered),  # hope for broadcast
-                               reduction_indices=1, keep_dims=True)
+                               axis=1, keep_dims=True)
         inv_sigma = tf.rsqrt(sigma)
         # get the gain coefficients
         gains = tf.get_variable('gains',

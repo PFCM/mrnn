@@ -21,7 +21,7 @@ from mrnn.tensor_ops import *
 import mrnn.init as init
 
 
-class SimpleRandomSparseCell(tf.nn.rnn_cell.RNNCell):
+class SimpleRandomSparseCell(tf.contrib.rnn.RNNCell):
     """Implements the above with a random sparse W.
     """
 
@@ -61,7 +61,7 @@ class SimpleRandomSparseCell(tf.nn.rnn_cell.RNNCell):
                                 initializer=tf.constant_initializer(0.0))
             # make and flatten the outer product
             # have to do this with some unfortunate reshaping
-            outer_prod = tf.batch_matmul(
+            outer_prod = tf.matmul(
                 tf.reshape(states, [-1, self._num_units, 1]),
                 tf.reshape(inputs, [-1, 1, self._num_inputs]))
             outer_prod = tf.reshape(
@@ -79,7 +79,7 @@ class SimpleRandomSparseCell(tf.nn.rnn_cell.RNNCell):
             return output, output
 
 
-class SimpleRandomSparseCell2(tf.nn.rnn_cell.RNNCell):
+class SimpleRandomSparseCell2(tf.contrib.rnn.RNNCell):
     """As above, but with a more careful implementation"""
     def __init__(self, num_units, num_inputs, sparsity,
                  nonlinearity=tf.nn.relu):
@@ -118,9 +118,9 @@ class SimpleRandomSparseCell2(tf.nn.rnn_cell.RNNCell):
             #     inputs = tf.expand_dims(inputs, 0)
             batch_ones = tf.ones([inputs.get_shape()[0].value, 1])
             vec_a = tf.concat(
-                1, [inputs, batch_ones])
+                axis=1, values=[inputs, batch_ones])
             vec_b = tf.concat(
-                1, [states, batch_ones])
+                axis=1, values=[states, batch_ones])
             activations = bilinear_product_sparse(vec_a, tensor, vec_b,
                                                   self.output_size,
                                                   batch_major=True)
@@ -128,7 +128,7 @@ class SimpleRandomSparseCell2(tf.nn.rnn_cell.RNNCell):
             return output, output
 
 
-class SimpleCPCell(tf.nn.rnn_cell.RNNCell):
+class SimpleCPCell(tf.contrib.rnn.RNNCell):
     """Super simple net, but with a tensor stored in its
     CP approximation of given rank."""
 
@@ -169,9 +169,9 @@ class SimpleCPCell(tf.nn.rnn_cell.RNNCell):
                          self._num_inputs+1]
 
                 vec_b = tf.concat(
-                    1, [inputs, tf.ones([inputs.get_shape()[0].value, 1])])
+                    axis=1, values=[inputs, tf.ones([inputs.get_shape()[0].value, 1])])
                 vec_a = tf.concat(
-                    1, [states, tf.ones([inputs.get_shape()[0].value, 1])])
+                    axis=1, values=[states, tf.ones([inputs.get_shape()[0].value, 1])])
             else:
                 shape = [self._num_units,
                          self._num_units,
@@ -215,7 +215,7 @@ class SimpleCPCell(tf.nn.rnn_cell.RNNCell):
             return result, result
 
 
-class SimpleTTCell(tf.nn.rnn_cell.RNNCell):
+class SimpleTTCell(tf.contrib.rnn.RNNCell):
     """Simple RNN cell using the tensor stored in TT format"""
 
     def __init__(self, num_outputs, num_inputs, ranks,
@@ -275,9 +275,9 @@ class SimpleTTCell(tf.nn.rnn_cell.RNNCell):
                            self._num_outputs,
                            self._num_inputs+1]
                 vec_a = tf.concat(
-                    1, [inputs, tf.ones([inputs.get_shape()[0].value, 1])])
+                    axis=1, values=[inputs, tf.ones([inputs.get_shape()[0].value, 1])])
                 vec_b = tf.concat(
-                    1, [inputs, tf.ones([inputs.get_shape()[0].value, 1])])
+                    axis=1, values=[inputs, tf.ones([inputs.get_shape()[0].value, 1])])
             tensor = get_tt_3_tensor(t_shape, self._ranks, name='W')
             result = bilinear_product_tt_3(vec_a, tensor, vec_b)
             if self._separate_pad:

@@ -12,7 +12,7 @@ import mrnn.init as init
 import mrnn.handy_ops as hops
 
 
-class FlatRNNCell(tf.nn.rnn_cell.RNNCell):
+class FlatRNNCell(tf.contrib.rnn.RNNCell):
     """a basic rnn cell, but rolled up to use one big weight
     matrix, as per tf.nn.rnn_cell.BasicRNNCell except with more
     flexible nonlinearities etc."""
@@ -65,12 +65,12 @@ class FlatRNNCell(tf.nn.rnn_cell.RNNCell):
                                            self.state_size],
                                           initializer=self._W_init)
             bias = tf.get_variable('b', [self.state_size])
-            args = tf.concat(1, [inputs, state])
+            args = tf.concat(axis=1, values=[inputs, state])
             output = self._nonlin(tf.matmul(args, weights) + bias)
         return output, output
 
 
-class VRNNCell(tf.nn.rnn_cell.RNNCell):
+class VRNNCell(tf.contrib.rnn.RNNCell):
     """A basic rnn cell"""
 
     def __init__(self, num_units, input_size=None,
@@ -179,7 +179,7 @@ class VRNNCell(tf.nn.rnn_cell.RNNCell):
                 reg_loss *= self._orthreg
                 tf.add_to_collection(tf.GraphKeys.REGULARIZATION_LOSSES,
                                      reg_loss)
-            
+
         return output, output
 
 

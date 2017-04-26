@@ -40,8 +40,8 @@ def _tensor_logits(inputs, states, rank, weightnorm=None, pad=True,
     input_size = inputs.get_shape()[1].value
     if pad and not separate_pad:
         # just add a column of ones to inputs and states
-        inputs = tf.concat(1, [tf.ones([batch_size, 1]), inputs])
-        states = tf.concat(1, [tf.ones([batch_size, 1]), states])
+        inputs = tf.concat(axis=1, values=[tf.ones([batch_size, 1]), inputs])
+        states = tf.concat(axis=1, values=[tf.ones([batch_size, 1]), states])
         # the tensor now has to be a little bit of an odd shape
         tensor = get_cp_tensor([state_size+1,
                                 state_size,
@@ -89,7 +89,7 @@ def _affine(data, new_size, weightnorm=None, name='affine'):
     return tf.nn.bias_add(tf.matmul(data, weights), bias)
 
 
-class CPGateCell(tf.nn.rnn_cell.RNNCell):
+class CPGateCell(tf.contrib.rnn.RNNCell):
     """A forget gate and an accumulator"""
 
     def __init__(self, num_units, rank, dropout=1.0, layernorm='',
@@ -150,7 +150,7 @@ class CPGateCell(tf.nn.rnn_cell.RNNCell):
         return result, result
 
 
-class CPResCell(tf.nn.rnn_cell.RNNCell):
+class CPResCell(tf.contrib.rnn.RNNCell):
     """try something JIC"""
 
     def __init__(self, num_units, num_inputs, rank):
@@ -199,7 +199,7 @@ class CPResCell(tf.nn.rnn_cell.RNNCell):
 
 
 
-class CPDeltaCell(tf.nn.rnn_cell.RNNCell):
+class CPDeltaCell(tf.contrib.rnn.RNNCell):
     """Upon which all hopes are pinned"""
 
     def __init__(self, num_units, num_inputs, rank, weightnorm=None):
@@ -250,7 +250,7 @@ class CPDeltaCell(tf.nn.rnn_cell.RNNCell):
 
 
 
-class CPLossyIntegrator(tf.nn.rnn_cell.RNNCell):
+class CPLossyIntegrator(tf.contrib.rnn.RNNCell):
     """Upon which all hopes are pinned"""
 
     def __init__(self, num_units, num_inputs, rank, weightnorm=None):
@@ -295,7 +295,7 @@ class CPLossyIntegrator(tf.nn.rnn_cell.RNNCell):
         return result, result
 
 
-class CPSimpleIntegrator(tf.nn.rnn_cell.RNNCell):
+class CPSimpleIntegrator(tf.contrib.rnn.RNNCell):
     """Upon which all hopes are pinned"""
 
     def __init__(self, num_units, num_inputs, rank, layernorm=False):
@@ -343,7 +343,7 @@ class CPSimpleIntegrator(tf.nn.rnn_cell.RNNCell):
         return result, result
 
 
-class AddSubCPCell(tf.nn.rnn_cell.RNNCell):
+class AddSubCPCell(tf.contrib.rnn.RNNCell):
     """Basically difference between two of the below"""
 
     def __init__(self, num_units, num_inputs, rank,
@@ -417,7 +417,7 @@ class AddSubCPCell(tf.nn.rnn_cell.RNNCell):
         return result, result
 
 
-class AdditiveCPCell(tf.nn.rnn_cell.RNNCell):
+class AdditiveCPCell(tf.contrib.rnn.RNNCell):
     """Uses a CP decomposition to factorise the tensor"""
 
     def __init__(self, num_units, num_inputs, rank,
