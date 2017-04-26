@@ -13,7 +13,7 @@ cells = [
     'lstm',
     'vanilla']
 
-learning_rates = ['0.1', '0.01', '0.001']
+learning_rates = ['0.02', '0.01', '0.005']
 ranks = ['1', '8', '32', '64', '128', '256']
 
 grid_iter = itertools.product(cells, learning_rates, ranks)
@@ -25,7 +25,7 @@ for cell, lr, rank in grid_iter:
     print('>%>|' * 20)
     print('cell: {}, lr: {}, rank: {}'.format(cell, lr, rank))
 
-    results_dir = os.path.join('gridsearch', cell,
+    results_dir = os.path.join('ptb_grid_bs100_sl50', cell,
                                'lr-{}'.format(lr),
                                'rank-{}'.format(rank))
     os.makedirs(results_dir)
@@ -36,8 +36,8 @@ for cell, lr, rank in grid_iter:
         '--num_layers=1',
         '--num_epochs=10',
         '--rank={}'.format(rank),
-        '--batch_size=50',
-        '--sequence_length=75',
+        '--batch_size=100',
+        '--sequence_length=50',
         '--learning_rate={}'.format(lr),
         '--cell={}'.format(cell),
         '--results_dir={}'.format(results_dir)]
