@@ -89,6 +89,68 @@ def _affine(data, new_size, weightnorm=None, name='affine'):
     return tf.nn.bias_add(tf.matmul(data, weights), bias)
 
 
+class FullTGUCell(tf.contrib.rnn.RNNCell):
+    """Input gate, output gate"""
+
+    def __init__(self, num_units, rank, dropout=1.0, layernorm='',
+                 weight_noise=0.0, separate_pad=True,
+                 candidate_nonlin=tf.identity):
+        self._num_units = num_units
+        self._rank = rank
+        self._dropout = dropout
+        self.layernorm = layernorm
+        self.weight_noise = weight_noise
+        self.separate_pad = separate_pad
+        self.candidate_nonlin = candidate_nonlin
+
+    @property
+    def rank(self):
+        return self._rank
+
+    @property
+    def state_size(self):
+        return self._num_units
+
+    @property
+    def output_size(self):
+        return self._num_units
+
+    def __call__(self, inputs, state, scope=None):
+        with tf.variable_scope(scope or type(self).__name__):
+            with tf.variable_scope('accumulator',
+                                   initializer=init.orthonormal_init(1.0)):
+                input_acts = _affine(inputs, self.state_size, name='input')
+                if 'pre' in self.layernorm and 'input' in self.layernorm:
+                    input_acts = layer_normalise(input_acts)
+                update = self.candidate_nonlin(input_acts)
+
+                if self._dropout != 1.0:
+                    update = variational_wrapper(
+                        update, keep_prob=self._dropout)
+
+            with tf.variable_scope('forgetter',
+                                   initializer=init.orthonormal_init(1.0)):
+                forget_acts = _tensor_logits(
+                    inputs, state, self.rank, pad=True,
+                    separate_pad=self.separate_pad,
+                    weightnorm=None)
+                if 'pre' in self.layernorm and 'forget' in self.layernorm:
+                    forget_acts = layer_normalise(forget_acts, add_bias=True,
+                                                  bias_initialiser=0.0)
+                forget_gate = tf.nn.sigmoid(forget_acts)
+
+            c_t = forget_gate * state + (1.0-forget_gate) * update
+
+            with tf.variable_scope('output',
+                                   initializer=init.orthonormal_init(1.0)):
+                output_acts = _tensor_logits(
+                    inputs, c_t, self.rank, pad=True,
+                    separate_pad=self.separate_pad, weightnorm=None)
+                output = tf.nn.tanh(output_acts)
+
+        return output, c_t
+
+
 class CPGateCell(tf.contrib.rnn.RNNCell):
     """A forget gate and an accumulator"""
 
