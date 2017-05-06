@@ -94,7 +94,7 @@ class FullTGUCell(tf.contrib.rnn.RNNCell):
 
     def __init__(self, num_units, rank, dropout=1.0, layernorm='',
                  weight_noise=0.0, separate_pad=True,
-                 candidate_nonlin=tf.identity):
+                 candidate_nonlin=tf.identity, v2=False):
         self._num_units = num_units
         self._rank = rank
         self._dropout = dropout
@@ -102,6 +102,7 @@ class FullTGUCell(tf.contrib.rnn.RNNCell):
         self.weight_noise = weight_noise
         self.separate_pad = separate_pad
         self.candidate_nonlin = candidate_nonlin
+        self.v2 = v2
 
     @property
     def rank(self):
@@ -143,10 +144,15 @@ class FullTGUCell(tf.contrib.rnn.RNNCell):
 
             with tf.variable_scope('output',
                                    initializer=init.orthonormal_init(1.0)):
-                output_acts = _tensor_logits(
-                    inputs, c_t, self.rank, pad=True,
-                    separate_pad=self.separate_pad, weightnorm=None)
-                output = tf.nn.tanh(output_acts)
+                if self.v2:
+                    output_acts = _tensor_logits(
+                        inputs, states, self.rank, pad=True,
+                        separate_pad=self.separate_pad, weightnorm=None)
+                else:
+                    output_acts = _tensor_logits(
+                        inputs, c_t, self.rank, pad=True,
+                        separate_pad=self.separate_pad, weightnorm=None)
+                output = tf.nn.sigmoid(output_acts)
 
         return output, c_t
 
