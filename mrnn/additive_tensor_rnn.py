@@ -146,7 +146,7 @@ class FullTGUCell(tf.contrib.rnn.RNNCell):
                                    initializer=init.orthonormal_init(1.0)):
                 if self.v2:
                     output_acts = _tensor_logits(
-                        inputs, states, self.rank, pad=True,
+                        inputs, state, self.rank, pad=True,
                         separate_pad=self.separate_pad, weightnorm=None)
                 else:
                     output_acts = _tensor_logits(
